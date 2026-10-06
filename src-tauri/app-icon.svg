@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="outer" x1="0.5" y1="1" x2="0.5" y2="0">
+      <stop offset="0" stop-color="#ff3d14"/>
+      <stop offset="0.55" stop-color="#ff6a33"/>
+      <stop offset="1" stop-color="#ffb347"/>
+    </linearGradient>
+    <linearGradient id="inner" x1="0.5" y1="1" x2="0.5" y2="0">
+      <stop offset="0" stop-color="#ff9a3c"/>
+      <stop offset="1" stop-color="#ffe08a"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.62" r="0.55">
+      <stop offset="0" stop-color="#ff6a33" stop-opacity="0.28"/>
+      <stop offset="1" stop-color="#ff6a33" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1024" height="1024" rx="228" fill="#0b0c0f"/>
+  <rect width="1024" height="1024" rx="228" fill="url(#glow)"/>
+  <path fill="url(#outer)" d="M512 140C556 290 744 372 744 596C744 738 642 850 512 850C382 850 280 738 280 596C280 516 318 450 366 404C376 470 418 504 452 504C430 372 458 256 512 140Z"/>
+  <path fill="url(#inner)" d="M512 468C536 548 628 596 628 690C628 760 576 816 512 816C448 816 396 760 396 690C396 640 424 604 452 580C458 614 480 632 498 632C486 568 494 516 512 468Z"/>
+</svg>

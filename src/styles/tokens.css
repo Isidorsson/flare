@@ -1,0 +1,35 @@
+@theme static {
+  --color-*: initial;
+
+  --color-bg: #0b0c0f;
+  --color-surface-1: #111216;
+  --color-surface-2: #17181d;
+  --color-surface-3: #1f2127;
+
+  --color-border: #24262d;
+  --color-border-strong: #353841;
+
+  --color-fg: #e9e7e4;
+  --color-fg-muted: #a0a3ac;
+  --color-fg-subtle: #7b7f8a;
+
+  --color-accent: #ff6a33;
+  --color-accent-hover: #ff8456;
+  --color-accent-fg: #1b0c05;
+  --color-accent-soft: #2a1710;
+
+  --color-success: #5fd38d;
+  --color-warning: #f5b94a;
+  --color-danger: #f0605d;
+  --color-info: #6aa7ff;
+
+  --font-sans: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "Cascadia Code", "Cascadia Mono", Consolas, ui-monospace, monospace;
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+
+  --default-transition-duration: 120ms;
+  --default-transition-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
