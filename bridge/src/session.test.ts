@@ -151,11 +151,12 @@ describe("AgentSession message flow", () => {
     expect(events.map((event) => event.type)).toEqual([
       "session.ready",
       "session.outputStyles",
+      "turn.started",
       "assistant.message",
       "turn.completed",
       "error",
     ]);
-    expect(events[2]).toEqual({ type: "assistant.message", id: reply.uuid, text: "Hi there" });
+    expect(events[3]).toEqual({ type: "assistant.message", id: reply.uuid, text: "Hi there" });
   });
 
   test("selects the output style and announces the styles the CLI offers", async () => {

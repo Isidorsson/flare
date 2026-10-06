@@ -25,13 +25,11 @@ describe("applyAgentFileChange", () => {
     expect(state().changes[0]?.path).toBe(A);
   });
 
-  test("with follow on, shows each change in the diff view", async () => {
+  test("returns the recorded entry and leaves the editor to the live view", async () => {
     const { state } = await openedStore(FILES);
-    expect(state().follow).toBe(true);
-    state().applyAgentFileChange(agentChange());
-    expect(state().active).toEqual({ kind: "diff", changeId: "change-1" });
-    state().applyAgentFileChange(agentChange({ path: B, toolUseId: "tool-2" }));
-    expect(state().active).toEqual({ kind: "diff", changeId: "change-2" });
+    const entry = state().applyAgentFileChange(agentChange());
+    expect(state().changes).toEqual([entry]);
+    expect(state().active).toBeNull();
   });
 
   test("with follow off, only records the change", async () => {
@@ -40,18 +38,6 @@ describe("applyAgentFileChange", () => {
     state().applyAgentFileChange(agentChange());
     expect(state().changes).toHaveLength(1);
     expect(state().active).toBeNull();
-  });
-
-  test("follow does not pull the view away from unsaved edits", async () => {
-    const { state } = await openedStore(FILES);
-    await state().openFile(B);
-    state().setDraft(B, "typing...");
-    state().applyAgentFileChange(agentChange());
-    expect(state().active).toEqual({ kind: "file", path: B });
-    expect(state().changes).toHaveLength(1);
-    state().setDraft(B, "beta");
-    state().applyAgentFileChange(agentChange({ toolUseId: "tool-2" }));
-    expect(state().active).toEqual({ kind: "diff", changeId: "change-2" });
   });
 
   test("a clean open buffer jumps to the agent's content", async () => {
@@ -67,6 +53,31 @@ describe("applyAgentFileChange", () => {
     state().setDraft(A, "mine");
     state().applyAgentFileChange(agentChange());
     expect(state().files[A]).toMatchObject({ draft: "mine", conflict: { kind: "modified", content: "new" } });
+  });
+});
+
+describe("turns and new files", () => {
+  test("startTurn records which turn the turn strip shows", async () => {
+    const { state } = await openedStore(FILES);
+    expect(state().turnId).toBeNull();
+    state().startTurn("turn-2");
+    expect(state().turnId).toBe("turn-2");
+  });
+
+  test("openEmptyPreview opens a blank preview tab for a file that does not exist yet", async () => {
+    const { state, gateway } = await openedStore(FILES);
+    state().openEmptyPreview(`${ROOT}/src/new.ts`);
+    expect(state().active).toEqual({ kind: "file", path: `${ROOT}/src/new.ts` });
+    expect(state().files[`${ROOT}/src/new.ts`]).toMatchObject({ status: "ready", saved: "", draft: "", preview: true });
+    expect(gateway.reads).toEqual([]);
+  });
+
+  test("the blank tab follows the file once the agent has written it", async () => {
+    const { state } = await openedStore(FILES);
+    const path = `${ROOT}/src/new.ts`;
+    state().openEmptyPreview(path);
+    state().applyAgentFileChange(agentChange({ path, kind: "create", before: null, after: "export {};\n" }));
+    expect(state().files[path]).toMatchObject({ saved: "export {};\n", draft: "export {};\n", conflict: null });
   });
 });
 
@@ -146,12 +157,59 @@ describe("noteAgentFileRead", () => {
   });
 
   test("activates an already open file instead of reading it again", async () => {
-    const { state, gateway } = await openedStore(FILES);
+    const { state, gateway, clock } = await openedStore(FILES);
     await state().openFile(A);
     await state().openFile(B);
+    clock.now += 12_000;
     await state().noteAgentFileRead(A);
     expect(state().active).toEqual({ kind: "file", path: A });
     expect(gateway.reads).toEqual([A, B]);
+  });
+
+  test("does not take the editor for six seconds after the user typed", async () => {
+    const { state, clock } = await openedStore(FILES);
+    await state().openFile(A);
+    clock.now += 20_000;
+    state().setDraft(A, "old");
+    clock.now += 5_999;
+    await state().noteAgentFileRead(B);
+    expect(state().active).toEqual({ kind: "file", path: A });
+    clock.now += 1;
+    await state().noteAgentFileRead(B);
+    expect(state().active).toEqual({ kind: "file", path: B });
+  });
+
+  test("does not take the editor for twelve seconds after the user picked a file", async () => {
+    const { state, clock } = await openedStore(FILES);
+    await state().openFile(A);
+    clock.now += 11_999;
+    await state().noteAgentFileRead(B);
+    expect(state().active).toEqual({ kind: "file", path: A });
+    clock.now += 1;
+    await state().noteAgentFileRead(B);
+    expect(state().active).toEqual({ kind: "file", path: B });
+  });
+
+  test("a quiet agent open does not count as the user picking a file", async () => {
+    const { state } = await openedStore(FILES);
+    await state().noteAgentFileRead(A);
+    await state().noteAgentFileRead(B);
+    expect(state().active).toEqual({ kind: "file", path: B });
+    expect(state().userActivity).toEqual({ typedAt: null, pickedAt: null });
+  });
+
+  test("clicking a tab, a timeline entry or a file counts as picking", async () => {
+    const { state, clock } = await openedStore(FILES);
+    await state().openFile(A);
+    state().setFollow(false);
+    state().applyAgentFileChange(agentChange());
+    state().setFollow(true);
+    clock.now += 20_000;
+    state().activateFile(A);
+    expect(state().userActivity.pickedAt).toBe(clock.now);
+    clock.now += 20_000;
+    state().showChange("change-1");
+    expect(state().userActivity.pickedAt).toBe(clock.now);
   });
 
   test("waits for the workspace to be ready", async () => {

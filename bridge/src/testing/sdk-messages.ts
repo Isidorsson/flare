@@ -90,6 +90,26 @@ export function thinkingDelta(thinking: string): SDKPartialAssistantMessage {
   };
 }
 
+function streamEvent(event: SDKPartialAssistantMessage["event"]): SDKPartialAssistantMessage {
+  return { type: "stream_event", uuid: nextUuid(), session_id: SESSION_ID, parent_tool_use_id: null, event };
+}
+
+export function messageStop(): SDKPartialAssistantMessage {
+  return streamEvent({ type: "message_stop" });
+}
+
+export function toolUseStart(index: number, id: string, name: string): SDKPartialAssistantMessage {
+  return streamEvent({ type: "content_block_start", index, content_block: { type: "tool_use", id, name, input: {} } });
+}
+
+export function inputJsonDelta(index: number, partialJson: string): SDKPartialAssistantMessage {
+  return streamEvent({ type: "content_block_delta", index, delta: { type: "input_json_delta", partial_json: partialJson } });
+}
+
+export function blockStop(index: number): SDKPartialAssistantMessage {
+  return streamEvent({ type: "content_block_stop", index });
+}
+
 interface ToolResult {
   id: string;
   content: string | { type: "text"; text: string }[];

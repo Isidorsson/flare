@@ -2,11 +2,10 @@ import { describe, expect, test } from "bun:test";
 import { resolve } from "node:path";
 
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
-import type { BridgeEvent } from "@flare/protocol";
 
-import { MessageNormalizer } from "./normalize";
+import { DEFAULT_READ_LINE_LIMIT } from "./tools";
 import { MAX_SUMMARY_CHARS } from "./summary";
-import { createFakeFs } from "./testing/fake-fs";
+import { CWD, FILE, setupNormalizer as setup } from "./testing/normalizer-harness";
 import {
   assistantMessage,
   initMessage,
@@ -18,20 +17,6 @@ import {
   toolResultMessage,
   toolUseBlock,
 } from "./testing/sdk-messages";
-
-const CWD = resolve("/work/app");
-const FILE = resolve(CWD, "src/a.ts");
-
-function setup(files: Record<string, string> = {}) {
-  const fs = createFakeFs(files);
-  const normalizer = new MessageNormalizer({ sessionId: SESSION_ID, cwd: CWD, readText: fs.readText });
-  async function run(...messages: SDKMessage[]): Promise<BridgeEvent[]> {
-    const events: BridgeEvent[] = [];
-    for (const message of messages) events.push(...(await normalizer.normalize(message)));
-    return events;
-  }
-  return { fs, normalizer, run };
-}
 
 describe("streaming text", () => {
   test("turns text deltas into assistant.delta", async () => {
@@ -90,8 +75,16 @@ describe("tool lifecycle", () => {
     const events = await run(assistantMessage([toolUseBlock("t1", "Read", { file_path: "src/a.ts" })]));
     expect(events).toEqual([
       { type: "tool.started", toolUseId: "t1", name: "Read", input: { file_path: "src/a.ts" } },
-      { type: "file.read", toolUseId: "t1", path: FILE },
+      { type: "file.read", toolUseId: "t1", path: FILE, range: { start: 1, end: DEFAULT_READ_LINE_LIMIT } },
     ]);
+  });
+
+  test("puts the offset and limit of a Read into the range", async () => {
+    const { run } = setup();
+    const events = await run(
+      assistantMessage([toolUseBlock("t1", "Read", { file_path: "src/a.ts", offset: 120, limit: 40 })]),
+    );
+    expect(events.at(-1)).toEqual({ type: "file.read", toolUseId: "t1", path: FILE, range: { start: 120, end: 159 } });
   });
 
   test("emits tool.finished with a text summary and the error flag", async () => {
@@ -177,8 +170,8 @@ describe("file.change before/after capture", () => {
 
     expect(started.map((event) => event.type)).toEqual(["tool.started"]);
     expect(finished).toEqual([
-      { type: "tool.finished", toolUseId: "t1", isError: false, summary: "updated" },
       { type: "file.change", toolUseId: "t1", path: FILE, kind: "update", before: "const a = 1;\n", after: "const a = 2;\n" },
+      { type: "tool.finished", toolUseId: "t1", isError: false, summary: "updated" },
     ]);
   });
 
@@ -191,7 +184,7 @@ describe("file.change before/after capture", () => {
     await run(assistantMessage([toolUseBlock("t1", "Write", input)]));
     const finished = await run(toolResultMessage([{ id: "t1", content: "ok" }]));
 
-    expect(finished.at(-1)).toMatchObject({ type: "file.change", before: "old", after: "new" });
+    expect(finished.find((event) => event.type === "file.change")).toMatchObject({ before: "old", after: "new" });
   });
 
   test("falls back to capturing when the assistant message arrives without a hook", async () => {
@@ -202,7 +195,7 @@ describe("file.change before/after capture", () => {
     fs.write(FILE, "new");
     const finished = await run(toolResultMessage([{ id: "t1", content: "ok" }]));
 
-    expect(finished.at(-1)).toMatchObject({ type: "file.change", before: "old", after: "new" });
+    expect(finished.find((event) => event.type === "file.change")).toMatchObject({ before: "old", after: "new" });
   });
 
   test("reports a Write to a new file as a create", async () => {
@@ -214,7 +207,7 @@ describe("file.change before/after capture", () => {
     fs.write(FILE, "export {};\n");
     const finished = await run(toolResultMessage([{ id: "t1", content: "created" }]));
 
-    expect(finished.at(-1)).toEqual({
+    expect(finished.find((event) => event.type === "file.change")).toEqual({
       type: "file.change",
       toolUseId: "t1",
       path: FILE,
@@ -232,10 +225,8 @@ describe("file.change before/after capture", () => {
     await normalizer.beginTool("t1", "MultiEdit", input);
     fs.write(FILE, "x b");
 
-    expect((await run(toolResultMessage([{ id: "t1", content: "ok" }]))).at(-1)).toMatchObject({
-      before: "a b",
-      after: "x b",
-    });
+    const finished = await run(toolResultMessage([{ id: "t1", content: "ok" }]));
+    expect(finished.find((event) => event.type === "file.change")).toMatchObject({ before: "a b", after: "x b" });
   });
 
   test("emits no file.change when the tool failed", async () => {
@@ -259,7 +250,7 @@ describe("file.change before/after capture", () => {
     await normalizer.beginTool("t1", "Edit", input);
     const finished = await run(toolResultMessage([{ id: "t1", content: "ok" }]));
 
-    expect(finished.at(-1)).toEqual({
+    expect(finished.find((event) => event.type === "error")).toEqual({
       type: "error",
       message: `Could not capture ${FILE} before the change: file is too large`,
     });

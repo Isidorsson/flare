@@ -1,4 +1,5 @@
-import { reconcileDisk } from "./buffer-model";
+import { recordUserActivity } from "./agent-slice";
+import { fromRead, reconcileDisk } from "./buffer-model";
 import { activating, withTab, withoutTab } from "./buffer-transitions";
 import { loadFile, openPreviewQuietly, saveFile, syncFileFromDisk } from "./buffers-io";
 import type { BufferActions, BufferData, OpenFileOptions, StoreContext } from "./files-types";
@@ -15,6 +16,7 @@ export function bufferActions(ctx: StoreContext): BufferActions {
   async function openFile(rawPath: string, options: OpenFileOptions = {}) {
     const path = resolvePath(get().root, rawPath);
     if (path === null) throw new Error(`Cannot open "${rawPath}" without an open workspace`);
+    if (options.quiet !== true) recordUserActivity(ctx, "pickedAt");
     const preview = options.preview ?? false;
     const existing = get().files[path];
     if (existing !== undefined) {
@@ -32,16 +34,23 @@ export function bufferActions(ctx: StoreContext): BufferActions {
 
   return {
     openFile,
+    openEmptyPreview: (path) => {
+      set(withTab(path, true));
+      set(updateFile(path, (file) => fromRead(file, { kind: "text", content: "", size: 0 })));
+    },
     saveFile: (path) => saveFile(ctx, path),
     syncFromDisk: (path) => syncFileFromDisk(ctx, path),
     reloadFile: (path) => loadFile(ctx, path),
     activateFile: (path) => {
-      if (get().files[path] !== undefined) set({ active: { kind: "file", path } });
+      if (get().files[path] === undefined) return;
+      recordUserActivity(ctx, "pickedAt");
+      set({ active: { kind: "file", path } });
     },
     closeFile: (path) => {
       set(withoutTab(path));
     },
     setDraft: (path, content) => {
+      recordUserActivity(ctx, "typedAt");
       set(updateFile(path, (file) => (file.status === "ready" ? { ...file, draft: content, preview: false } : file)));
     },
     saveActive: async () => {
