@@ -1,9 +1,18 @@
+pub mod fs;
 mod pty;
 
 pub fn run() {
     tauri::Builder::default()
+        .manage(fs::FsState::default())
         .manage(pty::PtyState::default())
         .invoke_handler(tauri::generate_handler![
+            fs::commands::fs_open_workspace,
+            fs::commands::fs_close_workspace,
+            fs::commands::fs_list_dir,
+            fs::commands::fs_read_file,
+            fs::commands::fs_write_file,
+            fs::commands::fs_subscribe,
+            fs::commands::fs_unsubscribe,
             pty::commands::pty_spawn,
             pty::commands::pty_write,
             pty::commands::pty_resize,
