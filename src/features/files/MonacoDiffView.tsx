@@ -42,7 +42,7 @@ export function MonacoDiffView({ entry }: { entry: TimelineEntry }) {
   return (
     <DiffEditor
       original={entry.before ?? ""}
-      modified={entry.after ?? ""}
+      modified={entry.after}
       language={languageForPath(entry.path)}
       originalModelPath={diffModelUri(entry.id, "original")}
       modifiedModelPath={diffModelUri(entry.id, "modified")}

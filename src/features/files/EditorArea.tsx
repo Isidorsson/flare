@@ -84,24 +84,21 @@ function FilePane({ path }: { path: string }) {
 function DiffHeader({ entry, label }: { entry: TimelineEntry; label: string }) {
   const root = useFiles((state) => state.root);
   const openFile = useFiles((state) => state.openFile);
-  const canOpen = entry.kind !== "delete";
   return (
     <div className="flex h-8 shrink-0 items-center gap-2 border-b border-border px-3 text-xs">
       <span className="shrink-0 rounded bg-accent-soft px-1.5 text-[10px] leading-4 text-accent">{label}</span>
       <span className="min-w-0 flex-1 truncate text-fg-muted" title={entry.path}>
         {root === null ? entry.path : relativeTo(root, entry.path)}
       </span>
-      {canOpen ? (
-        <button
-          type="button"
-          onClick={() => {
-            void openFile(entry.path);
-          }}
-          className="shrink-0 text-fg-muted underline-offset-2 hover:text-fg hover:underline"
-        >
-          Open file
-        </button>
-      ) : null}
+      <button
+        type="button"
+        onClick={() => {
+          void openFile(entry.path);
+        }}
+        className="shrink-0 text-fg-muted underline-offset-2 hover:text-fg hover:underline"
+      >
+        Open file
+      </button>
     </div>
   );
 }

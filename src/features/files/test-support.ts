@@ -29,7 +29,7 @@ export function agentChange(overrides: Partial<AgentFileChange> = {}): AgentFile
     turnId: "turn-a",
     toolUseId: "tool-1",
     path: `${ROOT}/src/a.ts`,
-    kind: "modify",
+    kind: "update",
     before: "old",
     after: "new",
     ...overrides,

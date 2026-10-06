@@ -25,8 +25,7 @@ export function agentActions(ctx: StoreContext): AgentActions {
     const id = `change-${state.changes.length + 1}`;
     const path = resolvePath(state.root, change.path) ?? normalizePath(change.path);
     set({ changes: [...state.changes, { ...change, path, id }] });
-    if (change.kind === "delete") state.applyDiskContent(path, null);
-    else if (change.after !== null) state.applyDiskContent(path, change.after);
+    state.applyDiskContent(path, change.after);
     if (canFollow(state)) set({ active: { kind: "diff", changeId: id } });
   }
 

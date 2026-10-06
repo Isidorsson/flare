@@ -13,7 +13,7 @@ describe("applyAgentFileChange", () => {
     state().applyAgentFileChange(agentChange({ path: "c:\\proj\\src\\a.ts" }));
     state().applyAgentFileChange(agentChange({ path: B, toolUseId: "tool-2", kind: "create", before: null }));
     expect(state().changes.map((c) => [c.id, c.path, c.kind, c.toolUseId])).toEqual([
-      ["change-1", A, "modify", "tool-1"],
+      ["change-1", A, "update", "tool-1"],
       ["change-2", B, "create", "tool-2"],
     ]);
     expect(state().changes[0]).toMatchObject({ turnId: "turn-a", before: "old", after: "new" });
@@ -67,20 +67,6 @@ describe("applyAgentFileChange", () => {
     state().setDraft(A, "mine");
     state().applyAgentFileChange(agentChange());
     expect(state().files[A]).toMatchObject({ draft: "mine", conflict: { kind: "modified", content: "new" } });
-  });
-
-  test("a deletion flags the open buffer", async () => {
-    const { state } = await openedStore(FILES);
-    await state().openFile(A);
-    state().applyAgentFileChange(agentChange({ kind: "delete", after: null }));
-    expect(state().files[A]?.conflict).toEqual({ kind: "deleted" });
-  });
-
-  test("a change without captured content leaves open buffers alone", async () => {
-    const { state } = await openedStore(FILES);
-    await state().openFile(A);
-    state().applyAgentFileChange(agentChange({ after: null }));
-    expect(state().files[A]).toMatchObject({ saved: "old", conflict: null });
   });
 });
 

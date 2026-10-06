@@ -1,16 +1,13 @@
+import type { BridgeEventOf, FileChangeKind } from "@flare/protocol";
+
 import type { FsGateway } from "./fs-gateway";
 import type { DirEntry, WatchBatch } from "./fs-schemas";
 
-export type AgentChangeKind = "create" | "modify" | "delete";
+export type AgentChangeKind = FileChangeKind;
 
-/** Mirrors the bridge `file.change` event plus the turn the caller attributes it to. */
-export interface AgentFileChange {
+/** The bridge `file.change` event plus the turn the caller attributes it to. */
+export interface AgentFileChange extends Omit<BridgeEventOf<"file.change">, "type"> {
   turnId: string;
-  toolUseId: string;
-  path: string;
-  kind: AgentChangeKind;
-  before: string | null;
-  after: string | null;
 }
 
 export interface TimelineEntry extends AgentFileChange {

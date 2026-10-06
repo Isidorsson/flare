@@ -1,4 +1,4 @@
-import { FilePen, FilePlus, FileX, FileDiff, type LucideIcon } from "lucide-react";
+import { FilePen, FilePlus, FileDiff, type LucideIcon } from "lucide-react";
 import { useMemo } from "react";
 
 import { EmptyState } from "@/shared/ui/EmptyState";
@@ -10,8 +10,7 @@ import { useFiles } from "./use-files";
 
 const KIND_VIEW: Record<AgentChangeKind, { icon: LucideIcon; label: string; tone: string }> = {
   create: { icon: FilePlus, label: "Created", tone: "text-success" },
-  modify: { icon: FilePen, label: "Edited", tone: "text-warning" },
-  delete: { icon: FileX, label: "Deleted", tone: "text-danger" },
+  update: { icon: FilePen, label: "Edited", tone: "text-warning" },
 };
 
 interface EntryButtonProps {
