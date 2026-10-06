@@ -1,19 +1,14 @@
 # Flare: plan
 
-A Windows-first Tauri 2 desktop app that drives the user's installed Claude Code. The chat sits in the centre. A live file panel follows the agent's reads and edits, a code graph lights up as the agent moves through the project, and a terminal drawer runs underneath. The goal is the GhosttyEXTREME experience with t3code's agent plumbing, rebuilt for Windows.
+A Windows-first Tauri 2 desktop app that drives the user's installed Claude Code. The chat sits in the centre. A live file panel follows the agent's reads and edits, a code graph lights up as the agent moves through the project, and a terminal drawer runs underneath.
 
-## Research findings
+## Building blocks
 
-| Source | What we take | What we leave |
-|---|---|---|
-| GhosttyEXTREME (AGPL-3.0, macOS-only Swift) | Ideas and UX mechanics only: agent sidebar with live status, editor following the agent's reads and edits, a "star map" code graph, blast radius, review inbox | All code, and its colour scheme. Copying code would make us AGPL. |
-| t3code (MIT, Electron + Node server) | The Claude adapter pattern (`ClaudeAdapterV2.ts`): one long-lived `query()` fed by a message queue, `includePartialMessages`, `canUseTool` waiting on a UI decision, `resume`/`forkSession`, Edit/Write/MultiEdit mapped to `file_change`, git hidden-ref checkpoints | Effect RPC, the multi-provider orchestration, the Electron shell |
-| Upstream Ghostty | `ghostty-web` (MIT): Ghostty's VT parser compiled to WASM, with an xterm.js-compatible API | Native Ghostty renderer (no Windows GUI exists) |
-| Claude Agent SDK (TS) | The only first-party programmatic driver. Takes `pathToClaudeCodeExecutable`, `effort`, `setModel()`, `interrupt()`, `canUseTool`, `settings.outputStyle`, `initializationResult().available_output_styles` | There is no official Rust SDK, so we need a TS sidecar |
+- **Claude Agent SDK (TS)**: the only first-party programmatic driver. One long-lived `query()` fed by a message queue, `includePartialMessages`, `canUseTool` waiting on a UI decision, `resume`, `setModel()`, `interrupt()`, `effort`, `settings.outputStyle`, `initializationResult().available_output_styles`. There is no Rust SDK, so a TS sidecar hosts it.
+- **ghostty-web** (MIT): a VT parser compiled to WASM with an xterm.js-compatible API, used for the terminal.
+- **Live activity**: rather than replaying edits after they land on disk, Flare streams the Edit/Write tool input as the model writes it (`file.editing`) and settles with the exact before/after from `file.change`.
 
-**How GhosttyEXTREME shows agent activity** (researched 2026-10-06): edits come from a file watcher diffed against a turn-start snapshot and are replayed as a line-by-line reveal after they land; reads come from tailing the transcript JSONL. Flare goes further by streaming the Edit tool's input as the model writes it (`file.editing`).
-
-**Auth:** we spawn the user's own `claude` binary, which uses their existing login. That is fine for personal use, the same way t3code works. Anthropic does not allow *distributing* a product that offers claude.ai login, so a public release would need API-key auth instead.
+**Auth:** we spawn the user's own `claude` binary, which uses their existing login. That is fine for personal use. Anthropic does not allow *distributing* a product that offers claude.ai login, so a public release would need API-key auth instead.
 
 ## Architecture
 
@@ -111,7 +106,7 @@ Flare/
 - [ ] **6. Polish (original plan).**
   - SQLite thread persistence (threads and transcripts survive restarts).
   - Worktrees: run a thread in its own git worktree.
-  - EXTREME-style motion: agent status sprites, frame glow while working.
+  - Motion polish: agent status sprites, frame glow while working.
 - [x] Markdown rendering for assistant messages (streaming-safe, GFM, Monaco-coloured code, file refs open at line, links via opener).
 - [x] Blast-radius toggle applies to the selected file; button audit of ~50 controls.
 - [x] Graph edges: one line per file pair, one arc per neighbour, zoom-independent line width, folder links only in overview.
@@ -124,7 +119,7 @@ Flare/
 - [ ] Dev-only demo replay: play a recorded agent event sequence to check animations without spending tokens.
 - [ ] Output style "New style…": create custom styles in `~/.claude/output-styles`.
 
-### Backlog from the reference screenshots (2026-10-06)
+### Backlog
 - [ ] **Session sidebar.** Sessions grouped by project, per-agent cards (agent, branch, task, status: Working / Needs permission / Idle, last action, `+A −R`), multiple agents per project, usage bars (5 h / week) at the bottom.
 - [ ] **Backend architecture view.** Columns Frontend → Compute → Data → Services as cards (framework, deploy target, bindings, status chips like "Deployed", "Newer commits than the last deploy", "1 migration not applied") with connecting lines; inspector with environments, overview, deployments, out-of-sync warnings, where each binding is used in code.
 - [ ] **Database view.** Live schema diagram: tables with columns, types, keys, relation lines; inspector with columns, references, "used in code".
