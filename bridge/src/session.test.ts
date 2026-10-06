@@ -71,6 +71,13 @@ describe("AgentSession.start", () => {
     expect(events).toEqual([{ type: "session.ready", sessionId: "new-session-id" }]);
   });
 
+  test("passes the auto permission mode to the SDK unchanged", () => {
+    const { session, live } = setup();
+    session.start({ ...START, permissionMode: "auto" });
+
+    expect(live().params.options.permissionMode).toBe("auto");
+  });
+
   test("resumes an existing session by id", () => {
     const { session, events, live } = setup();
     session.start({ ...START, resume: "old-session" });

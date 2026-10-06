@@ -7,12 +7,17 @@ use serde::{Serialize, Serializer};
 use tauri::async_runtime::Receiver;
 use tauri::ipc::Channel;
 use tauri::{AppHandle, Manager, State};
-use tauri_plugin_shell::process::{CommandChild, CommandEvent};
+use tauri_plugin_shell::process::{Command, CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
 
 use framing::{frame_outgoing, FramingError, LineFramer, OutgoingError};
 
+#[cfg(not(debug_assertions))]
 const SIDECAR_NAME: &str = "flare-bridge";
+#[cfg(debug_assertions)]
+const REPO_ROOT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/..");
+#[cfg(debug_assertions)]
+const DEV_BRIDGE_ENTRY: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../bridge/src/main.ts");
 
 #[derive(Debug)]
 pub enum BridgeError {
@@ -103,15 +108,30 @@ pub fn bridge_start(
     state: State<'_, BridgeState>,
     on_event: Channel<String>,
 ) -> Result<(), BridgeError> {
-    let (events, child) = app
-        .shell()
-        .sidecar(SIDECAR_NAME)
+    let (events, child) = bridge_command(&app)
         .and_then(|command| command.set_raw_out(true).spawn())
         .map_err(|error| BridgeError::Spawn(error.to_string()))?;
     let pid = child.pid();
     state.replace(Running { pid, child })?;
     tauri::async_runtime::spawn(relay(app, events, on_event, pid));
     Ok(())
+}
+
+#[cfg(not(debug_assertions))]
+fn bridge_command(app: &AppHandle) -> Result<Command, tauri_plugin_shell::Error> {
+    app.shell().sidecar(SIDECAR_NAME)
+}
+
+/// Dev runs the bridge from source so every bridge start picks up the current `bridge/` and
+/// `protocol/` code; the compiled sidecar is only rebuilt for release bundles and would go stale.
+/// Like the sidecar, it must not load a `.env`; it must not auto-install packages either.
+#[cfg(debug_assertions)]
+fn bridge_command(app: &AppHandle) -> Result<Command, tauri_plugin_shell::Error> {
+    Ok(app
+        .shell()
+        .command("bun")
+        .args(["--no-env-file", "--no-install", DEV_BRIDGE_ENTRY])
+        .current_dir(REPO_ROOT))
 }
 
 #[tauri::command]
@@ -211,6 +231,12 @@ mod tests {
     fn bridge_errors_serialize_as_plain_messages() {
         let json = serde_json::to_string(&BridgeError::NotRunning).expect("serializes");
         assert_eq!(json, "\"the agent bridge is not running\"");
+    }
+
+    #[cfg(debug_assertions)]
+    #[test]
+    fn dev_bridge_entry_exists() {
+        assert!(std::path::Path::new(DEV_BRIDGE_ENTRY).is_file());
     }
 
     #[test]

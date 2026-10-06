@@ -50,6 +50,16 @@ describe("processLine", () => {
     expect(queries[0]?.calls).toEqual(["setModel:opus", "effort:max", "setPermissionMode:default", "interrupt"]);
   });
 
+  test("relays the auto permission mode from the wire to the SDK", async () => {
+    const { session, queries, emit } = setup();
+
+    await processLine(encodeLine({ ...start, permissionMode: "auto" }).trim(), session, emit);
+    await processLine(encodeLine({ type: "session.setPermissionMode", permissionMode: "auto" }).trim(), session, emit);
+
+    expect(queries[0]?.params.options.permissionMode).toBe("auto");
+    expect(queries[0]?.calls).toEqual(["setPermissionMode:auto"]);
+  });
+
   test("reports a malformed line as a non fatal error and keeps going", async () => {
     const { session, events, emit } = setup();
 

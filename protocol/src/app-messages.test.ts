@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { appMessageSchema } from "./app-messages";
+import { PERMISSION_MODES } from "./constants";
 
 const validMessages: Record<string, object> = {
   "session.start": {
@@ -78,6 +79,14 @@ describe("appMessageSchema", () => {
 
   test.each(Object.entries(invalidMessages))("rejects %s", (_name, message) => {
     expect(appMessageSchema.safeParse(message).success).toBe(false);
+  });
+
+  test.each([...PERMISSION_MODES])("accepts permission mode %s when starting and switching", (permissionMode) => {
+    const start = { type: "session.start", cwd: "C:/work/app", model: "sonnet", effort: "high", permissionMode };
+    const switchMode = { type: "session.setPermissionMode", permissionMode };
+
+    expect(appMessageSchema.parse(start)).toMatchObject(start);
+    expect(appMessageSchema.parse(switchMode)).toMatchObject(switchMode);
   });
 
   test("covers every message type in the plan", () => {
