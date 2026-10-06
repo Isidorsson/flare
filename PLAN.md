@@ -6,33 +6,36 @@ A Windows-first Tauri 2 desktop app that drives the user's installed Claude Code
 
 | Source | What we take | What we leave |
 |---|---|---|
-| GhosttyEXTREME (AGPL-3.0, macOS-only Swift) | Ideas: agent sidebar with live status, Monaco following the agent's reads and edits, a "star map" code graph, blast radius, review inbox | All code. It is Swift/SwiftUI/Core Animation, and copying it would make us AGPL. |
+| GhosttyEXTREME (AGPL-3.0, macOS-only Swift) | Ideas and UX mechanics only: agent sidebar with live status, editor following the agent's reads and edits, a "star map" code graph, blast radius, review inbox | All code, and its colour scheme. Copying code would make us AGPL. |
 | t3code (MIT, Electron + Node server) | The Claude adapter pattern (`ClaudeAdapterV2.ts`): one long-lived `query()` fed by a message queue, `includePartialMessages`, `canUseTool` waiting on a UI decision, `resume`/`forkSession`, Edit/Write/MultiEdit mapped to `file_change`, git hidden-ref checkpoints | Effect RPC, the multi-provider orchestration, the Electron shell |
 | Upstream Ghostty | `ghostty-web` (MIT): Ghostty's VT parser compiled to WASM, with an xterm.js-compatible API | Native Ghostty renderer (no Windows GUI exists) |
-| Claude Agent SDK (TS) | The only first-party programmatic driver. Takes `pathToClaudeCodeExecutable`, `effort: "low"…"max"`, `setModel()`, `interrupt()`, `canUseTool` | There is no official Rust SDK, so we need a TS sidecar |
+| Claude Agent SDK (TS) | The only first-party programmatic driver. Takes `pathToClaudeCodeExecutable`, `effort`, `setModel()`, `interrupt()`, `canUseTool`, `settings.outputStyle`, `initializationResult().available_output_styles` | There is no official Rust SDK, so we need a TS sidecar |
 
-**Auth:** we spawn the user's own `claude` binary (v2.1.291 is installed), which uses their existing login. That is fine for personal use, the same way t3code works. Anthropic does not allow *distributing* a product that offers claude.ai login, so a public release would need API-key auth instead.
+**How GhosttyEXTREME shows agent activity** (researched 2026-10-06): edits come from a file watcher diffed against a turn-start snapshot and are replayed as a line-by-line reveal after they land; reads come from tailing the transcript JSONL. Flare goes further by streaming the Edit tool's input as the model writes it (`file.editing`).
+
+**Auth:** we spawn the user's own `claude` binary, which uses their existing login. That is fine for personal use, the same way t3code works. Anthropic does not allow *distributing* a product that offers claude.ai login, so a public release would need API-key auth instead.
 
 ## Architecture
 
 ```
 ┌──────────────── Tauri WebView (React + TS + Tailwind) ─────────────────┐
-│ Threads │        Chat (stream, tools, approvals)      │ Files │ Graph  │
-│ sidebar │                                             │ Monaco diff /  │
-│         │                                             │ sigma.js graph │
+│ Threads │        Chat (stream, tools, approvals)      │ Files | Graph  │
+│ sidebar │                                             │ | Split (tabs) │
 │         ├─────────────── Terminal drawer (ghostty-web) ────────────────┤
 └──────────────▲───────────────────────────── Tauri Channels / invoke ───┘
                │
 ┌──────────────┴──────────── Rust core (src-tauri) ──────────────────────┐
-│ bridge.rs   spawn/own sidecar, relay NDJSON <-> Channel (no parsing)   │
-│ pty.rs      portable-pty (ConPTY) sessions                             │
-│ fs.rs       read/write/list (ignore crate), notify watcher             │
+│ bridge/     spawn/own sidecar, relay NDJSON <-> Channel (no parsing)   │
+│ pty/        portable-pty (ConPTY) sessions                             │
+│ proctree/   Windows Job Objects: every spawned tree dies with Flare    │
+│ fs/         read/write/list (ignore crate), notify watcher hub         │
 │ graph/      tree-sitter import graph, incremental, blast radius        │
 └──────────────▲─────────────────────────────────────────────────────────┘
                │ stdio NDJSON
-┌──────────────┴──── bridge/ (Bun sidecar, `bun build --compile`) ───────┐
+┌──────────────┴──── bridge/ (Bun sidecar) ──────────────────────────────┐
 │ @anthropic-ai/claude-agent-sdk → spawns user's `claude` executable     │
 │ Normalises SDK messages into the Flare protocol (zod-validated)        │
+│ Dev: run from source with bun. Release: `bun build --compile` sidecar  │
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -41,43 +44,84 @@ Rust only *relays* agent messages. The protocol has a single source of truth: zo
 ### Bridge protocol (NDJSON, every line `{ type, ... }`)
 
 App → bridge
-- `session.start { cwd, model, effort, permissionMode, resume? }`
+- `session.start { cwd, model, effort, permissionMode, outputStyle, resume? }`
 - `user.message { text }`
 - `permission.respond { requestId, decision: "allow" | "allowSession" | "deny" }`
 - `interrupt`
-- `session.setModel { model }`
+- `session.setModel { model }`, `session.setEffort { effort }`, `session.setPermissionMode { permissionMode }`
 
 Bridge → app
-- `session.ready { sessionId }`
+- `session.ready { sessionId }` and `session.outputStyles { available }`
+- `turn.started` and `turn.completed { costUsd, usage }`
 - `assistant.delta { text }` and `assistant.message { id, text }`
 - `tool.started { toolUseId, name, input }` and `tool.finished { toolUseId, isError, summary }`
-- `file.read { toolUseId, path }` (from the Read/Grep/Glob tools; drives graph highlighting)
-- `file.change { toolUseId, path, kind, before, after }`. `before` is captured when the tool starts and `after` when it finishes.
+- `file.read { toolUseId, path, range?, pattern?, matchLines? }` (Read/Grep/Glob)
+- `file.editing { toolUseId, path, kind, oldString?, text }`: the Edit/Write input streamed while the model writes it, throttled to 50 ms
+- `file.change { toolUseId, path, kind, before, after }`: `before` captured in a PreToolUse hook, `after` when the tool finishes; sent before `tool.finished`
 - `permission.request { requestId, toolName, input }`
-- `turn.completed { costUsd, usage }`
-- `error { message }`
+- `error { message, fatal? }`
+
+Settings: permission modes `auto` (default) | `default` | `acceptEdits` | `plan`; output styles are Claude Code's built-ins (`default`, Proactive, Concise (default), Explanatory, Learning) plus any custom styles the CLI reports; default model Opus at medium effort.
 
 ## Repo layout
 
 ```
 Flare/
-  src/            React app (features: chat/, files/, graph/, terminal/, threads/)
-  src-tauri/      Rust core (bridge.rs, pty.rs, fs.rs, graph/)
+  src/            React app (features: agent/, agent-wiring/, chat/, files/, graph/, terminal/, threads/, right-panel/, shell/, workspace/)
+  src-tauri/      Rust core (bridge/, pty/, proctree/, fs/, graph/)
   bridge/         Bun sidecar (Agent SDK adapter)
   protocol/       zod schemas + inferred types (shared)
 ```
 
-**Stack:** bun, Vite, React 19, Tailwind v4, zustand, `@monaco-editor/react` (with its DiffEditor), `ghostty-web`, `sigma` + `graphology`. On the Rust side: `tauri` 2, `tauri-plugin-shell`, `portable-pty`, `notify`, `ignore`, `tree-sitter` with the TS/JS/Rust/Python grammars, and `serde`. Pick stable versions that are at least 7 days old.
+**Stack:** bun, Vite, React 19, Tailwind v4, zustand, `@monaco-editor/react`, `ghostty-web`, `sigma` + `graphology`. Rust: `tauri` 2, `tauri-plugin-shell`, `tauri-plugin-dialog`, `portable-pty`, `windows-sys`, `notify`, `ignore`, `tree-sitter` with grammars for TS/JS, Rust, Python, Lua/Luau, Go, C/C++, C#, Java, Kotlin, Ruby, PHP, Dart, Zig, shell (plus scanners for CSS/SCSS/Less, Vue, Svelte). All dependencies pinned to versions at least 7 days old.
 
-**Checks:** `bun run typecheck` (tsgo), `bun run lint`, `bun test`, `cargo clippy`, `cargo test`. Do not run `tauri dev` or `tauri build`.
+**Checks:** `bun run typecheck` (tsgo), `bun run lint`, `bun test`, `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, `cargo test`. Do not run `tauri dev` or `tauri build` from agents.
 
-## Phases
+## Status
 
-1. **Scaffold.** Tauri 2, Vite, React, Tailwind using bun. A resizable three-pane shell with a terminal drawer, and a dark theme with tokens.
-2. **Agent bridge (MVP core).** The Bun sidecar, the protocol package and the Rust relay. Chat with streaming, tool cards, an approval UI, interrupt, resume, and a model/effort picker.
-3. **Live file panel (MVP).** "Follow agent" mode opens each `file.change` in the Monaco diff view. Also an edit timeline per turn, a file tree, manual edit and save, and the notify watcher for changes made outside the agent.
-4. **Terminal.** portable-pty and ghostty-web, with multiple tabs.
-5. **Code graph.** A tree-sitter import graph built in Rust, rendered with sigma.js. Nodes pulse on `file.read` and `file.change`; clicking a node opens the file; blast radius is a reverse-dependency BFS.
-6. **Polish.** Git hidden-ref checkpoints and per-turn rollback, SQLite thread persistence, worktrees, and EXTREME-style motion (agent status sprites, frame glow).
+### Done
+- [x] **1. Scaffold.** Tauri 2, Vite, React, Tailwind, resizable shell, terminal drawer, dark theme tokens.
+- [x] **2. Agent bridge.** Sidecar, protocol, Rust relay, streaming chat, tool cards, approvals, interrupt, resume, combined model › effort menu, permission picker (Auto default), output-style picker (Concise default). Dev runs the bridge from source so it never goes stale.
+- [x] **3. Live file panel.** File tree, Monaco editor and diff, manual edit and save, notify watcher, edit timeline.
+- [x] **4. Terminal.** portable-pty + ghostty-web tabs. Every shell and the agent bridge run in a Windows Job Object, so whole process trees die on tab close, close-all or Flare exit/crash. "Close all terminals" button.
+- [x] **5. Code graph.** Tree-sitter import graph for 20+ languages, incremental updates driven by the fs watcher, blast radius, sigma.js rendering.
+- [x] **Live agent visualisation.**
+  - Files: read highlights with "Claude · reading lines a–b", edits typed live as the model streams them with a Claude caret, removed-line ghosts, settle animation, per-turn gutter marks, turn strip ("N files changed +A −R" with replay chips), tab underlines, file-tree heat and 1–5 recency badges, follow mode that never steals focus from the user.
+  - Graph: comet with trail and status pill, shockwave rings, slow-cooling heat, dashed path through recent files, particles along import edges, follow-agent camera, Fit.
+- [x] **Right panel tabs.** Files | Graph | Split (side by side with a divider). The graph keeps indexing and tracking activity while hidden.
+- [x] **Tooltips.** Shared `Tooltip` component; every control has a tooltip, `IconButton` requires a label, disabled buttons explain why.
 
-Phases 1–3 make up the MVP. Each phase ends with the checks passing and tests added for the protocol, the graph builder and the diff capture.
+### In progress
+- [ ] **Graph redesign** (branch `graph-style`). Layout and interaction from the reference screenshots, in Flare's own colours (do not copy the reference palette):
+  - Overview level with folders as hubs (`src/ 15`), touched files as star sparks, untouched files as faint dust.
+  - Soft region glows by role (frontend, database, config, tests, API…) with a role legend.
+  - Zoom levels: Overview | Files | Symbols.
+  - HUD chips: files, visited, edited, read only, `+A −R this turn`.
+  - Folder activity badges ("3 edited · 3 read").
+  - Agent pill "Claude Editing · file", dashed path through recently visited files, selection ring.
+  - Blast radius as curved dashed arcs (importers vs imports).
+  - File inspector panel: Open, Replay change, agent activity, this-turn mini diff, symbols, imported-by list with "This change can affect N files; X tests cover it".
+  - Calm palette, importance-based sizing, no overlapping labels, neighbourhood highlight on hover.
+  - Dev-only graph lab page with fixture projects for visual iteration.
+
+### Next
+- [ ] **6. Polish (original plan).**
+  - Git hidden-ref checkpoints and per-turn rollback ("undo this turn").
+  - SQLite thread persistence (threads and transcripts survive restarts).
+  - Worktrees: run a thread in its own git worktree.
+  - EXTREME-style motion: agent status sprites, frame glow while working.
+- [ ] Markdown rendering for assistant messages.
+- [ ] Dedicated cards for `AskUserQuestion` and `ExitPlanMode` (today generic approval cards).
+- [ ] Clickable links in the terminal (`tauri-plugin-opener`), right-click paste.
+- [ ] Force a full page reload when `src/features/agent/` changes in dev (module-level store survives HMR).
+- [ ] Dev-only demo replay: play a recorded agent event sequence to check animations without spending tokens.
+- [ ] Output style "New style…": create custom styles in `~/.claude/output-styles`.
+
+### Backlog from the reference screenshots (2026-10-06)
+- [ ] **Session sidebar.** Sessions grouped by project, per-agent cards (agent, branch, task, status: Working / Needs permission / Idle, last action, `+A −R`), multiple agents per project, usage bars (5 h / week) at the bottom.
+- [ ] **Backend architecture view.** Columns Frontend → Compute → Data → Services as cards (framework, deploy target, bindings, status chips like "Deployed", "Newer commits than the last deploy", "1 migration not applied") with connecting lines; inspector with environments, overview, deployments, out-of-sync warnings, where each binding is used in code.
+- [ ] **Database view.** Live schema diagram: tables with columns, types, keys, relation lines; inspector with columns, references, "used in code".
+- [ ] **Visual Fix.** Built-in browser pane on the dev server (localhost port picker, device sizes); "Pick" mode: hover any element in the app and click to ask Claude to fix it.
+- [ ] **Background process manager.** Everything left running (VMs, containers, agent sessions, browser automation, log followers) with last-used time, memory, "Ready to close" status, Stop/Close buttons and "Close N ready to close"; views Needs attention | Everything | By project. Extends the Job Object work in `proctree/`.
+- [ ] **Multiple agents at once.** Editor grid with one pane per active agent, per-agent comet colours, same-file conflict warning.
+- [ ] **Review inbox.** Turn-start snapshot (temporary git index + write-tree), per-file accept/undo, line comments, send feedback to the agent, commit/PR.
