@@ -318,12 +318,12 @@ describe("settings", () => {
     const ctx = setup();
     await startThread(ctx);
 
-    ctx.state().changeSettings({ model: "opus", effort: DEFAULT_SESSION_SETTINGS.effort });
+    ctx.state().changeSettings({ model: "haiku", effort: DEFAULT_SESSION_SETTINGS.effort });
     ctx.state().changeSettings({ effort: "max", permissionMode: "acceptEdits" });
     await ctx.settle();
 
     expect(ctx.sent.slice(2)).toEqual([
-      { type: "session.setModel", model: "opus" },
+      { type: "session.setModel", model: "haiku" },
       { type: "session.setEffort", effort: "max" },
       { type: "session.setPermissionMode", permissionMode: "acceptEdits" },
     ]);
@@ -333,11 +333,11 @@ describe("settings", () => {
     const ctx = setup();
     await startThread(ctx);
 
-    ctx.state().changeSettings({ responseStyle: "explanatory" });
+    ctx.state().changeSettings({ outputStyle: "Explanatory" });
     await ctx.settle();
 
     expect(ctx.sent).toHaveLength(2);
-    expect(ctx.state().settings.responseStyle).toBe("explanatory");
+    expect(ctx.state().settings.outputStyle).toBe("Explanatory");
   });
 
   test("only stores settings when nothing is live and uses them for the next session", async () => {

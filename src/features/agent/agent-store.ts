@@ -4,7 +4,12 @@ import { createJSONStorage, persist, type StateStorage } from "zustand/middlewar
 import { z } from "zod";
 
 import { AgentController, type AgentDeps, type AgentSnapshot } from "./agent-controller";
-import { DEFAULT_SESSION_SETTINGS, sessionSettingsSchema, type SessionSettings } from "./session-settings";
+import {
+  DEFAULT_SESSION_SETTINGS,
+  mergeOutputStyles,
+  sessionSettingsSchema,
+  type SessionSettings,
+} from "./session-settings";
 
 export const AGENT_SETTINGS_STORAGE_KEY = "flare.session-settings";
 
@@ -48,6 +53,7 @@ export function createAgentStore({ storage, ...deps }: AgentStoreDeps) {
           threads: [],
           activeThreadId: null,
           liveThreadId: null,
+          outputStyles: mergeOutputStyles([], []),
           sendMessage: (text) => {
             controller.sendMessage(text);
           },

@@ -7,7 +7,7 @@ import type { AppMessageOf, BridgeEvent } from "@flare/protocol";
 import { AgentSession } from "./session";
 import { rejectionOf } from "./testing/async-helpers";
 import { createFakeFs } from "./testing/fake-fs";
-import { FakeQuery } from "./testing/fake-query";
+import { FAKE_OUTPUT_STYLES, FakeQuery } from "./testing/fake-query";
 import { assistantMessage, resultMessage, textBlock, toolResultMessage, toolUseBlock } from "./testing/sdk-messages";
 
 const CWD = resolve("/work/app");
@@ -19,7 +19,7 @@ const START: AppMessageOf<"session.start"> = {
   model: "sonnet",
   effort: "high",
   permissionMode: "default",
-  responseStyle: "concise",
+  outputStyle: "Concise",
 };
 
 function setup(files: Record<string, string> = {}) {
@@ -150,11 +150,21 @@ describe("AgentSession message flow", () => {
 
     expect(events.map((event) => event.type)).toEqual([
       "session.ready",
+      "session.outputStyles",
       "assistant.message",
       "turn.completed",
       "error",
     ]);
-    expect(events[1]).toEqual({ type: "assistant.message", id: reply.uuid, text: "Hi there" });
+    expect(events[2]).toEqual({ type: "assistant.message", id: reply.uuid, text: "Hi there" });
+  });
+
+  test("selects the output style and announces the styles the CLI offers", async () => {
+    const { session, events, live } = setup();
+    session.start({ ...START, outputStyle: "Explanatory" });
+    await Promise.resolve();
+
+    expect(live().params.options.settings).toEqual({ outputStyle: "Explanatory" });
+    expect(events).toContainEqual({ type: "session.outputStyles", available: FAKE_OUTPUT_STYLES });
   });
 
   test("reports the end of the CLI process as a fatal error and forgets the session", async () => {

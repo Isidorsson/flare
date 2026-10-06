@@ -19,6 +19,11 @@ export const sessionReadySchema = z.object({
   sessionId: nonEmpty,
 });
 
+export const sessionOutputStylesSchema = z.object({
+  type: z.literal("session.outputStyles"),
+  available: z.array(nonEmpty),
+});
+
 export const assistantDeltaSchema = z.object({
   type: z.literal("assistant.delta"),
   text: z.string(),
@@ -82,6 +87,7 @@ export const errorSchema = z.object({
 
 export const bridgeEventSchema = z.discriminatedUnion("type", [
   sessionReadySchema,
+  sessionOutputStylesSchema,
   assistantDeltaSchema,
   assistantMessageSchema,
   toolStartedSchema,

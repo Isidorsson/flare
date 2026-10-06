@@ -39,6 +39,8 @@ function applyConversationEvent(thread: Thread, event: Exclude<BridgeEvent, Tool
   switch (event.type) {
     case "session.ready":
       return { ...thread, sessionId: event.sessionId };
+    case "session.outputStyles":
+      return thread;
     case "assistant.delta":
       return appendDelta(thread, event.text);
     case "assistant.message":

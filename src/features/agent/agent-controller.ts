@@ -9,7 +9,7 @@ import {
 import { describeError } from "@/shared/lib/describe-error";
 
 import type { BridgeTransport } from "./bridge-transport";
-import type { SessionSettings } from "./session-settings";
+import { mergeOutputStyles, type SessionSettings } from "./session-settings";
 import { createThread, type Thread } from "./thread-types";
 import { addNotice, addUserMessage, applyBridgeEvent, markPermission, stopRunning } from "./transcript";
 
@@ -18,6 +18,7 @@ export interface AgentSnapshot {
   threads: Thread[];
   activeThreadId: string | null;
   liveThreadId: string | null;
+  outputStyles: string[];
 }
 
 export interface StoreAccess {
@@ -137,7 +138,7 @@ export class AgentController {
         model: settings.model,
         effort: settings.effort,
         permissionMode: settings.permissionMode,
-        responseStyle: settings.responseStyle,
+        outputStyle: settings.outputStyle,
         ...(thread.sessionId === null ? {} : { resume: thread.sessionId }),
       });
     } catch (error) {
@@ -186,6 +187,10 @@ export class AgentController {
   }
 
   #ingest(event: BridgeEvent): void {
+    if (event.type === "session.outputStyles") {
+      this.#store.set((state) => ({ outputStyles: mergeOutputStyles(state.outputStyles, event.available) }));
+      return;
+    }
     const { liveThreadId, activeThreadId } = this.#store.get();
     const targetId = liveThreadId ?? (event.type === "error" ? activeThreadId : null);
     if (targetId === null) return;

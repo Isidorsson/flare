@@ -9,6 +9,8 @@ export interface QueryParams {
   options: Options;
 }
 
+export const FAKE_OUTPUT_STYLES = ["default", "Concise", "Pirate"];
+
 export class FakeQuery implements AgentQuery {
   readonly calls: string[] = [];
   readonly params: QueryParams;
@@ -55,6 +57,10 @@ export class FakeQuery implements AgentQuery {
   applyFlagSettings(settings: { effortLevel: Effort }): Promise<void> {
     this.calls.push(`effort:${settings.effortLevel}`);
     return Promise.resolve();
+  }
+
+  initializationResult(): Promise<{ available_output_styles: string[] }> {
+    return Promise.resolve({ available_output_styles: FAKE_OUTPUT_STYLES });
   }
 
   close(): void {

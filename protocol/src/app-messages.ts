@@ -1,11 +1,11 @@
 import { z } from "zod";
 
-import { EFFORT_LEVELS, PERMISSION_DECISIONS, PERMISSION_MODES, RESPONSE_STYLES } from "./constants";
+import { EFFORT_LEVELS, PERMISSION_DECISIONS, PERMISSION_MODES } from "./constants";
 
 export const effortSchema = z.enum(EFFORT_LEVELS);
 export const permissionModeSchema = z.enum(PERMISSION_MODES);
 export const permissionDecisionSchema = z.enum(PERMISSION_DECISIONS);
-export const responseStyleSchema = z.enum(RESPONSE_STYLES);
+export const outputStyleSchema = z.string().min(1);
 
 const nonEmpty = z.string().min(1);
 
@@ -15,7 +15,7 @@ export const sessionStartSchema = z.object({
   model: nonEmpty,
   effort: effortSchema,
   permissionMode: permissionModeSchema,
-  responseStyle: responseStyleSchema,
+  outputStyle: outputStyleSchema,
   resume: nonEmpty.optional(),
 });
 
@@ -62,6 +62,5 @@ export const appMessageSchema = z.discriminatedUnion("type", [
 export type Effort = z.infer<typeof effortSchema>;
 export type PermissionMode = z.infer<typeof permissionModeSchema>;
 export type PermissionDecision = z.infer<typeof permissionDecisionSchema>;
-export type ResponseStyle = z.infer<typeof responseStyleSchema>;
 export type AppMessage = z.infer<typeof appMessageSchema>;
 export type AppMessageOf<T extends AppMessage["type"]> = Extract<AppMessage, { type: T }>;

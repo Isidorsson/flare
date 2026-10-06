@@ -11,13 +11,13 @@ import type { ReadText } from "./file-capture";
 import { MessageNormalizer } from "./normalize";
 import { PermissionBroker } from "./permissions";
 import { AsyncQueue } from "./queue";
-import { responseStyleOptions } from "./response-style";
 
 export interface AgentQuery extends AsyncIterable<SDKMessage> {
   interrupt(): Promise<unknown>;
   setModel(model: string): Promise<void>;
   setPermissionMode(mode: PermissionMode): Promise<void>;
   applyFlagSettings(settings: { effortLevel: Effort }): Promise<void>;
+  initializationResult(): Promise<{ available_output_styles: string[] }>;
   close(): void;
 }
 
@@ -69,6 +69,16 @@ export class AgentSession {
     this.#active = active;
     active.pump = this.#pump(active);
     this.#deps.emit({ type: "session.ready", sessionId });
+    void this.#announceOutputStyles(query);
+  }
+
+  async #announceOutputStyles(query: AgentQuery): Promise<void> {
+    try {
+      const { available_output_styles: available } = await query.initializationResult();
+      if (this.#active?.query === query) this.#deps.emit({ type: "session.outputStyles", available });
+    } catch (error) {
+      this.#deps.log(`could not list output styles: ${String(error)}`);
+    }
   }
 
   sendUserMessage(text: string): void {
@@ -160,7 +170,8 @@ function buildOptions({ message, sessionId, executable, broker, normalizer, log 
     permissionMode: message.permissionMode,
     includePartialMessages: true,
     pathToClaudeCodeExecutable: executable,
-    ...responseStyleOptions(message.responseStyle),
+    systemPrompt: { type: "preset", preset: "claude_code" },
+    settings: { outputStyle: message.outputStyle },
     canUseTool: broker.canUseTool,
     hooks: { PreToolUse: [{ hooks: [captureBeforeToolUse(normalizer)] }] },
     stderr: log,

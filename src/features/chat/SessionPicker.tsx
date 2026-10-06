@@ -1,33 +1,21 @@
-import {
-  EFFORT_LEVELS,
-  PERMISSION_MODES,
-  RESPONSE_STYLES,
-  effortSchema,
-  permissionModeSchema,
-  responseStyleSchema,
-} from "@flare/protocol";
+import { PERMISSION_MODES, outputStyleSchema, permissionModeSchema } from "@flare/protocol";
 
-import {
-  EFFORT_LABELS,
-  MODEL_IDS,
-  MODEL_LABELS,
-  PERMISSION_MODE_LABELS,
-  RESPONSE_STYLE_LABELS,
-  modelSchema,
-} from "@/features/agent/session-settings";
+import { PERMISSION_MODE_LABELS, mergeOutputStyles, outputStyleLabel } from "@/features/agent/session-settings";
 import { useAgent } from "@/features/agent/use-agent";
+
+import { ModelEffortMenu } from "./ModelEffortMenu";
 
 interface PickerProps<T extends string> {
   label: string;
   title?: string;
   value: T;
   options: readonly T[];
-  labels: Record<T, string>;
+  labelOf: (option: T) => string;
   parse: (value: string) => T;
   onChange: (value: T) => void;
 }
 
-function Picker<T extends string>({ label, title, value, options, labels, parse, onChange }: PickerProps<T>) {
+function Picker<T extends string>({ label, title, value, options, labelOf, parse, onChange }: PickerProps<T>) {
   return (
     <label title={title} className="flex items-center gap-1.5 text-[11px] text-fg-subtle">
       <span>{label}</span>
@@ -40,7 +28,7 @@ function Picker<T extends string>({ label, title, value, options, labels, parse,
       >
         {options.map((option) => (
           <option key={option} value={option}>
-            {labels[option]}
+            {labelOf(option)}
           </option>
         ))}
       </select>
@@ -50,35 +38,17 @@ function Picker<T extends string>({ label, title, value, options, labels, parse,
 
 export function SessionPicker() {
   const settings = useAgent((state) => state.settings);
+  const outputStyles = useAgent((state) => state.outputStyles);
   const changeSettings = useAgent((state) => state.changeSettings);
 
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-      <Picker
-        label="Model"
-        value={settings.model}
-        options={MODEL_IDS}
-        labels={MODEL_LABELS}
-        parse={(value) => modelSchema.parse(value)}
-        onChange={(model) => {
-          changeSettings({ model });
-        }}
-      />
-      <Picker
-        label="Effort"
-        value={settings.effort}
-        options={EFFORT_LEVELS}
-        labels={EFFORT_LABELS}
-        parse={(value) => effortSchema.parse(value)}
-        onChange={(effort) => {
-          changeSettings({ effort });
-        }}
-      />
+      <ModelEffortMenu model={settings.model} effort={settings.effort} onChange={changeSettings} />
       <Picker
         label="Permissions"
         value={settings.permissionMode}
         options={PERMISSION_MODES}
-        labels={PERMISSION_MODE_LABELS}
+        labelOf={(mode) => PERMISSION_MODE_LABELS[mode]}
         parse={(value) => permissionModeSchema.parse(value)}
         onChange={(permissionMode) => {
           changeSettings({ permissionMode });
@@ -87,12 +57,12 @@ export function SessionPicker() {
       <Picker
         label="Style"
         title="Applies from the next session"
-        value={settings.responseStyle}
-        options={RESPONSE_STYLES}
-        labels={RESPONSE_STYLE_LABELS}
-        parse={(value) => responseStyleSchema.parse(value)}
-        onChange={(responseStyle) => {
-          changeSettings({ responseStyle });
+        value={settings.outputStyle}
+        options={mergeOutputStyles(outputStyles, [settings.outputStyle])}
+        labelOf={outputStyleLabel}
+        parse={(value) => outputStyleSchema.parse(value)}
+        onChange={(outputStyle) => {
+          changeSettings({ outputStyle });
         }}
       />
     </div>

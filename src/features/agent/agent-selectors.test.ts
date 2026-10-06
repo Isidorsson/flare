@@ -10,7 +10,14 @@ function thread(id: string, status: Thread["status"]): Thread {
 }
 
 function snapshot(partial: Partial<AgentSnapshot>): AgentSnapshot {
-  return { settings: DEFAULT_SESSION_SETTINGS, threads: [], activeThreadId: null, liveThreadId: null, ...partial };
+  return {
+    settings: DEFAULT_SESSION_SETTINGS,
+    threads: [],
+    activeThreadId: null,
+    liveThreadId: null,
+    outputStyles: [],
+    ...partial,
+  };
 }
 
 describe("selectComposerMode", () => {

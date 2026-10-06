@@ -1,10 +1,10 @@
 import {
+  BUILT_IN_OUTPUT_STYLES,
   effortSchema,
+  outputStyleSchema,
   permissionModeSchema,
-  responseStyleSchema,
   type Effort,
   type PermissionMode,
-  type ResponseStyle,
 } from "@flare/protocol";
 import { z } from "zod";
 
@@ -16,17 +16,17 @@ export const sessionSettingsSchema = z.object({
   model: modelSchema,
   effort: effortSchema,
   permissionMode: permissionModeSchema,
-  responseStyle: responseStyleSchema,
+  outputStyle: outputStyleSchema,
 });
 
 export type Model = z.infer<typeof modelSchema>;
 export type SessionSettings = z.infer<typeof sessionSettingsSchema>;
 
 export const DEFAULT_SESSION_SETTINGS: SessionSettings = {
-  model: "sonnet",
+  model: "opus",
   effort: "medium",
   permissionMode: "auto",
-  responseStyle: "concise",
+  outputStyle: "Concise",
 };
 
 export const MODEL_LABELS: Record<Model, string> = {
@@ -50,8 +50,11 @@ export const PERMISSION_MODE_LABELS: Record<PermissionMode, string> = {
   plan: "Plan only",
 };
 
-export const RESPONSE_STYLE_LABELS: Record<ResponseStyle, string> = {
-  concise: "Concise",
-  default: "Default",
-  explanatory: "Explanatory",
-};
+export function outputStyleLabel(name: string): string {
+  return name === "default" ? "Default" : name;
+}
+
+/** Built-in styles keep their order; styles the CLI reports (e.g. custom ones) follow. */
+export function mergeOutputStyles(known: readonly string[], available: readonly string[]): string[] {
+  return [...new Set([...BUILT_IN_OUTPUT_STYLES, ...known, ...available])];
+}

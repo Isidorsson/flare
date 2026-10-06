@@ -6,7 +6,7 @@ import { processLine, runCommandLoop } from "./commands";
 import { AgentSession } from "./session";
 import { chunksOf } from "./testing/async-helpers";
 import { createFakeFs } from "./testing/fake-fs";
-import { FakeQuery } from "./testing/fake-query";
+import { FAKE_OUTPUT_STYLES, FakeQuery } from "./testing/fake-query";
 
 function setup() {
   const events: BridgeEvent[] = [];
@@ -33,7 +33,7 @@ const start: AppMessage = {
   model: "sonnet",
   effort: "low",
   permissionMode: "plan",
-  responseStyle: "concise",
+  outputStyle: "Concise",
 };
 
 describe("processLine", () => {
@@ -47,7 +47,10 @@ describe("processLine", () => {
     await processLine(encodeLine({ type: "session.setPermissionMode", permissionMode: "default" }).trim(), session, emit);
     await processLine(encodeLine({ type: "interrupt" }).trim(), session, emit);
 
-    expect(events).toEqual([{ type: "session.ready", sessionId: "sid" }]);
+    expect(events).toEqual([
+      { type: "session.ready", sessionId: "sid" },
+      { type: "session.outputStyles", available: FAKE_OUTPUT_STYLES },
+    ]);
     expect(queries[0]?.calls).toEqual(["setModel:opus", "effort:max", "setPermissionMode:default", "interrupt"]);
   });
 
@@ -118,7 +121,10 @@ describe("runCommandLoop", () => {
     const { session, events, emit } = setup();
     await runCommandLoop(chunksOf(new TextEncoder().encode(JSON.stringify(start))), session, emit);
 
-    expect(events).toEqual([{ type: "session.ready", sessionId: "sid" }]);
+    expect(events).toEqual([
+      { type: "session.ready", sessionId: "sid" },
+      { type: "session.outputStyles", available: FAKE_OUTPUT_STYLES },
+    ]);
   });
 
   test("handles commands strictly in order", async () => {
@@ -129,6 +135,6 @@ describe("runCommandLoop", () => {
 
     await runCommandLoop(chunksOf(input), session, emit);
 
-    expect(events.map((event) => event.type)).toEqual(["error", "session.ready"]);
+    expect(events.map((event) => event.type)).toEqual(["error", "session.ready", "session.outputStyles"]);
   });
 });
