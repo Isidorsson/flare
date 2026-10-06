@@ -1,4 +1,5 @@
 mod bridge;
+mod checkpoints;
 pub mod fs;
 mod graph;
 mod proctree;
@@ -18,6 +19,12 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             bridge::bridge_start,
             bridge::bridge_send,
+            checkpoints::commands::checkpoint_create,
+            checkpoints::commands::checkpoint_list,
+            checkpoints::commands::checkpoint_diff,
+            checkpoints::commands::checkpoint_plan,
+            checkpoints::commands::checkpoint_restore,
+            checkpoints::commands::checkpoint_prune,
             fs::commands::fs_open_workspace,
             fs::commands::fs_close_workspace,
             fs::commands::fs_list_dir,
@@ -38,6 +45,9 @@ pub fn run() {
         ])
         .setup(|app| {
             graph::watch::spawn(app.handle().clone());
+            let checkpoints = checkpoints::CheckpointState::new(&app.path().app_data_dir()?);
+            app.manage(checkpoints.clone());
+            checkpoints::spawn_startup_sweep(checkpoints)?;
             Ok(())
         })
         .on_page_load(pty::on_page_load)

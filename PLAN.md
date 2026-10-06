@@ -30,6 +30,7 @@ A Windows-first Tauri 2 desktop app that drives the user's installed Claude Code
 │ proctree/   Windows Job Objects: every spawned tree dies with Flare    │
 │ fs/         read/write/list (ignore crate), notify watcher hub         │
 │ graph/      tree-sitter import graph, incremental, blast radius        │
+│ checkpoints/ git snapshots per agent turn, undo / redo / roll back     │
 └──────────────▲─────────────────────────────────────────────────────────┘
                │ stdio NDJSON
 ┌──────────────┴──── bridge/ (Bun sidecar) ──────────────────────────────┐
@@ -67,8 +68,8 @@ Settings: permission modes `auto` (default) | `default` | `acceptEdits` | `plan`
 
 ```
 Flare/
-  src/            React app (features: agent/, agent-wiring/, chat/, files/, graph/, terminal/, threads/, right-panel/, shell/, workspace/)
-  src-tauri/      Rust core (bridge/, pty/, proctree/, fs/, graph/)
+  src/            React app (features: agent/, agent-wiring/, chat/, checkpoints/, files/, graph/, terminal/, threads/, right-panel/, shell/, workspace/)
+  src-tauri/      Rust core (bridge/, pty/, proctree/, fs/, graph/, checkpoints/)
   bridge/         Bun sidecar (Agent SDK adapter)
   protocol/       zod schemas + inferred types (shared)
 ```
@@ -100,9 +101,14 @@ Flare/
 - [ ] HUD `+A −R` split (router must pass added/removed counts).
 - [ ] Folder hub click behaviour, curved import edges, denser large-project overview.
 
+### Checkpoints (done 2026-10-06)
+- [x] A snapshot of the working tree when a turn starts and ends, stored as parentless commits under `refs/flare/checkpoints/<thread id>/<turn>/start|end`. Taken with `git add -A` into a scratch copy of the index plus `write-tree` and `commit-tree`, so the user's index, HEAD, branches, stash and files are never touched; `.gitignore` is honoured. A folder outside any repository gets a private bare repository under the app data dir (refused above 20,000 files). Snapshots go through git's own line-ending rules in a repository and are byte-exact in a private one.
+- [x] "Undo turn" (turn footer, files turn strip) puts back only the files that turn changed, after a confirm step that lists them and flags files edited since. "Roll back to before this turn" (checkpoints menu in the chat header) also undoes later turns. Every restore saves a safety checkpoint first, so the toast offers Redo. Kept: the last 50 turns per thread; threads quiet for 14 days are deleted on startup (private repos) and when a workspace opens.
+- [x] The start snapshot is taken when a message is sent (the thread turns "running"), not on `turn.started`, which arrives only once the model streams and so can come after the agent's first edit; `turn.started` is the fallback for turns nobody sent a message for. The remaining gap is a first tool call that outruns a snapshot of a very large repository; closing it needs the bridge to wait for an acknowledgement in its PreToolUse hook.
+- [ ] Follow-ups: mark undone turns in the transcript, per-file undo, a persistent list after restart (waits for thread persistence).
+
 ### Next
 - [ ] **6. Polish (original plan).**
-  - Git hidden-ref checkpoints and per-turn rollback ("undo this turn").
   - SQLite thread persistence (threads and transcripts survive restarts).
   - Worktrees: run a thread in its own git worktree.
   - EXTREME-style motion: agent status sprites, frame glow while working.

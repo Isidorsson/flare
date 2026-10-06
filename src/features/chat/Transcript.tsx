@@ -1,7 +1,9 @@
 import { MessageSquare } from "lucide-react";
+import { Fragment } from "react";
 
 import type { ChatItem, Thread } from "@/features/agent/thread-types";
 import { useAgent } from "@/features/agent/use-agent";
+import { TurnEnd } from "@/features/checkpoints";
 import { EmptyState } from "@/shared/ui/EmptyState";
 import type { PermissionDecision } from "@flare/protocol";
 
@@ -53,8 +55,11 @@ export function Transcript({ thread }: { thread: Thread | null }) {
     <div ref={ref} onScroll={onScroll} className="min-h-0 flex-1 overflow-y-auto">
       <MarkdownServicesContext value={markdownServices}>
         <div role="log" aria-live="polite" className="mx-auto flex w-full max-w-3xl flex-col gap-3 px-4 py-4">
-          {thread.items.map((item) => (
-            <ItemRow key={item.id} item={item} onRespond={respondToPermission} />
+          {thread.items.map((item, index) => (
+            <Fragment key={item.id}>
+              <ItemRow item={item} onRespond={respondToPermission} />
+              <TurnEnd threadId={thread.id} items={thread.items} index={index} />
+            </Fragment>
           ))}
         </div>
       </MarkdownServicesContext>

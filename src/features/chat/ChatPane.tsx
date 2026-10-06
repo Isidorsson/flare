@@ -3,6 +3,7 @@ import { LoaderCircle } from "lucide-react";
 import { selectActiveThread } from "@/features/agent/agent-selectors";
 import { threadTitle } from "@/features/agent/thread-types";
 import { useAgent } from "@/features/agent/use-agent";
+import { CheckpointNotice, CheckpointsMenu, UndoDialog } from "@/features/checkpoints";
 import { baseName } from "@/shared/lib/path-name";
 import { Tooltip } from "@/shared/ui/Tooltip";
 
@@ -36,6 +37,7 @@ function ChatHeader() {
             <span tabIndex={0}>{formatCost(thread.costUsd)}</span>
           </Tooltip>
         )}
+        <CheckpointsMenu threadId={thread?.id ?? null} items={thread?.items ?? []} />
       </div>
     </header>
   );
@@ -48,7 +50,9 @@ export function ChatPane() {
     <main className="flex min-h-0 flex-1 flex-col bg-bg">
       <ChatHeader />
       <Transcript thread={thread} />
+      <CheckpointNotice />
       <Composer />
+      <UndoDialog />
     </main>
   );
 }
