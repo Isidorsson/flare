@@ -1,39 +1,46 @@
-import { MessageSquare, SendHorizontal } from "lucide-react";
+import { LoaderCircle } from "lucide-react";
 
-import { EmptyState } from "@/shared/ui/EmptyState";
-import { IconButton } from "@/shared/ui/IconButton";
+import { selectActiveThread } from "@/features/agent/agent-selectors";
+import { threadTitle } from "@/features/agent/thread-types";
+import { useAgent } from "@/features/agent/use-agent";
+import { baseName } from "@/shared/lib/path-name";
 
-function Composer() {
+import { Composer } from "./Composer";
+import { formatCost } from "./format-cost";
+import { Transcript } from "./Transcript";
+
+function ChatHeader() {
+  const thread = useAgent(selectActiveThread);
+  const running = thread?.status === "running";
+
   return (
-    <form className="mx-auto w-full max-w-3xl shrink-0 px-4 pb-4">
-      <div className="flex items-end gap-2 rounded-lg border border-border bg-surface-1 p-2 focus-within:border-border-strong">
-        <textarea
-          disabled
-          rows={2}
-          aria-label="Message Claude"
-          placeholder="Message Claude"
-          className="min-h-10 flex-1 resize-none bg-transparent px-2 py-1 text-sm text-fg outline-none placeholder:text-fg-subtle disabled:cursor-not-allowed"
-        />
-        <IconButton icon={SendHorizontal} label="Send message" disabled />
+    <header className="flex h-11 shrink-0 items-center gap-3 border-b border-border px-4">
+      <h1 className="min-w-0 truncate text-sm font-medium">{threadTitle(thread)}</h1>
+      {thread && (
+        <span title={thread.cwd} className="shrink-0 text-xs text-fg-subtle">
+          {baseName(thread.cwd)}
+        </span>
+      )}
+      <div className="ml-auto flex shrink-0 items-center gap-3 text-xs text-fg-muted">
+        {running && (
+          <span className="flex items-center gap-1.5 text-accent">
+            <LoaderCircle aria-hidden className="size-3.5 animate-spin" />
+            Working
+          </span>
+        )}
+        {thread !== null && thread.costUsd > 0 && <span title="Session cost so far">{formatCost(thread.costUsd)}</span>}
       </div>
-      <p className="mt-2 text-center text-xs text-fg-subtle">The agent is not connected yet.</p>
-    </form>
+    </header>
   );
 }
 
 export function ChatPane() {
+  const thread = useAgent(selectActiveThread);
+
   return (
     <main className="flex min-h-0 flex-1 flex-col bg-bg">
-      <header className="flex h-11 shrink-0 items-center border-b border-border px-4">
-        <h1 className="text-sm font-medium">New thread</h1>
-      </header>
-      <div className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto">
-        <EmptyState
-          icon={MessageSquare}
-          title="Start a conversation"
-          description="Ask Claude to read, explain or change your project. Replies, tool calls and approvals stream in here."
-        />
-      </div>
+      <ChatHeader />
+      <Transcript thread={thread} />
       <Composer />
     </main>
   );

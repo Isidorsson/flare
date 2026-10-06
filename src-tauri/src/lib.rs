@@ -1,11 +1,19 @@
+mod bridge;
 pub mod fs;
 mod pty;
 
+use tauri::{AppHandle, Manager, RunEvent};
+
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_shell::init())
+        .manage(bridge::BridgeState::default())
         .manage(fs::FsState::default())
         .manage(pty::PtyState::default())
         .invoke_handler(tauri::generate_handler![
+            bridge::bridge_start,
+            bridge::bridge_send,
             fs::commands::fs_open_workspace,
             fs::commands::fs_close_workspace,
             fs::commands::fs_list_dir,
@@ -21,7 +29,14 @@ pub fn run() {
         .on_page_load(pty::on_page_load)
         .build(tauri::generate_context!())
         .expect("failed to build Flare")
-        .run(|app, event| pty::on_run_event(app, &event));
+        .run(on_run_event);
+}
+
+fn on_run_event(app: &AppHandle, event: RunEvent) {
+    pty::on_run_event(app, &event);
+    if let RunEvent::Exit = event {
+        app.state::<bridge::BridgeState>().kill();
+    }
 }
 
 #[cfg(test)]

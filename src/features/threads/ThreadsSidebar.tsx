@@ -1,9 +1,14 @@
-import { Flame, MessagesSquare, SquarePen } from "lucide-react";
+import { Flame, SquarePen } from "lucide-react";
 
-import { EmptyState } from "@/shared/ui/EmptyState";
+import { useAgent } from "@/features/agent/use-agent";
 import { IconButton } from "@/shared/ui/IconButton";
 
+import { OpenFolderButton } from "./OpenFolderButton";
+import { ThreadList } from "./ThreadList";
+
 export function ThreadsSidebar() {
+  const newThread = useAgent((state) => state.newThread);
+
   return (
     <div className="flex h-full flex-col">
       <header className="flex h-11 shrink-0 items-center justify-between border-b border-border pr-2 pl-4">
@@ -11,14 +16,11 @@ export function ThreadsSidebar() {
           <Flame aria-hidden className="size-4 text-accent" />
           <span className="text-sm font-semibold tracking-tight">Flare</span>
         </div>
-        <IconButton icon={SquarePen} label="New thread" disabled />
+        <IconButton icon={SquarePen} label="New thread" onClick={newThread} />
       </header>
-      <nav aria-label="Threads" className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto">
-        <EmptyState
-          icon={MessagesSquare}
-          title="No threads yet"
-          description="Conversations with Claude in this project will be listed here."
-        />
+      <OpenFolderButton />
+      <nav aria-label="Threads" className="flex min-h-0 flex-1 flex-col">
+        <ThreadList />
       </nav>
     </div>
   );
