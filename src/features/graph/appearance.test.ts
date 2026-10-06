@@ -49,7 +49,6 @@ function context(overrides: Partial<AppearanceContext> = {}): AppearanceContext 
     sizeFactor: 1,
     layoutSpan: 100,
     edgeAlpha: 0.3,
-    arrows: true,
     ...overrides,
   };
 }

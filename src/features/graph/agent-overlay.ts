@@ -9,7 +9,7 @@ import {
   type FinishActivity,
   type TouchActivity,
 } from "./activity-state";
-import { arcControl, arcTargets, ARC_FLOW_PX_PER_MS } from "./arcs";
+import { arcColor, arcLinks, arcOrigin, arcShape, ARC_FLOW_PX_PER_MS } from "./arcs";
 import { drawHalo, type Pen } from "./canvas-draw";
 import { isCometAnimating, placePill, stepComet, trailSegments, type CometState } from "./comet";
 import { withAlpha } from "./color-math";
@@ -209,7 +209,10 @@ export class AgentOverlay {
     context.restore();
   }
 
-  /** The selected file, ringed. In the direct reach it also gets arcs to the files that import it (purple) and the files it imports (blue). */
+  /**
+   * The selected file, ringed. In the direct reach it also gets one arc per related file: importers, imports and mutual
+   * imports in their own colours. Sigma leaves those pairs out (see arcNeighbours), so each relation is drawn once.
+   */
   private drawSelection(context: Pen, now: number, reducedMotion: boolean): void {
     const { graph, store, palette } = this.deps;
     const state = store.getState();
@@ -217,16 +220,10 @@ export class AgentOverlay {
     if (origin === null || !graph.hasNode(origin)) return;
     const centre = this.nodeViewport(origin);
     const dashOffset = reducedMotion ? 0 : -now * ARC_FLOW_PX_PER_MS;
-    const { importers, imports } = state.reach === "direct" ? arcTargets(graph, origin) : { importers: [], imports: [] };
-    const arc = (from: Point, to: Point, color: string, index: number) => {
-      drawArc(context, { from, to, control: arcControl(from, to, index), color, dashOffset });
-    };
-    importers.forEach((id, index) => {
-      arc(this.nodeViewport(id), centre, palette.importer, index);
-    });
-    imports.forEach((id, index) => {
-      arc(centre, this.nodeViewport(id), palette.imports, index);
-    });
+    for (const { id, relation } of arcLinks(graph, arcOrigin(state))) {
+      const shape = arcShape(relation, centre, this.nodeViewport(id));
+      drawArc(context, { ...shape, color: arcColor(palette, relation), dashOffset });
+    }
     drawSelectionRing(context, centre, this.nodeRadius(origin) + 5, palette.labelStrong);
   }
 

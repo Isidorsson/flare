@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import { folderId } from "./directory-tree";
 import { diffSnapshots } from "./graph-diff";
-import { createCodeGraph, displayNode, IMPORT_EDGE_TYPE, readPositions, TREE_EDGE_TYPE, type NodeAttrs } from "./graph-model";
+import { createCodeGraph, displayNode, EDGE_TYPE, readPositions, type NodeAttrs } from "./graph-model";
 import { snapshotToGraph, syncGraph } from "./graph-sync";
 import type { GraphSnapshot, Language } from "./graph-types";
 
@@ -59,10 +59,10 @@ describe("snapshotToGraph", () => {
     const edge = graph.edge("src/a.ts", "src/b.ts");
     expect(edge === undefined ? undefined : graph.getEdgeAttributes(edge)).toMatchObject({
       kind: "import",
-      type: IMPORT_EDGE_TYPE,
+      type: EDGE_TYPE,
     });
     const link = graph.edge(folderId("src"), "src/a.ts");
-    expect(link === undefined ? undefined : graph.getEdgeAttributes(link)).toMatchObject({ kind: "tree", type: TREE_EDGE_TYPE });
+    expect(link === undefined ? undefined : graph.getEdgeAttributes(link)).toMatchObject({ kind: "tree", type: EDGE_TYPE });
     expect(graph.hasDirectedEdge(folderId(""), folderId("src"))).toBe(true);
     expect(graph.hasDirectedEdge("core/lib.rs", "core/lib.rs")).toBe(false);
   });
@@ -172,6 +172,28 @@ describe("syncGraph", () => {
     expect(graph.hasNode("src/a.ts")).toBe(true);
     expect(graph.hasDirectedEdge("src/a.ts", "src/b.ts")).toBe(false);
     expect(graph.hasDirectedEdge(folderId("src"), "src/a.ts")).toBe(true);
+  });
+
+  test("holds one edge per direction however often the same imports arrive", () => {
+    const lua = snapshot(
+      [
+        ["Server.lua", "lua"],
+        ["Peer.lua", "lua"],
+        ["AIO.lua", "lua"],
+      ],
+      [
+        ["Server.lua", "AIO.lua"],
+        ["Server.lua", "Peer.lua"],
+        ["Peer.lua", "Server.lua"],
+        ["Server.lua", "AIO.lua"],
+      ],
+    );
+    const graph = snapshotToGraph(lua, new Map());
+    const refreshed = { ...lua, edges: [...lua.edges] };
+    syncGraph(graph, refreshed, diffSnapshots(lua, refreshed), new Map());
+    syncGraph(graph, refreshed, diffSnapshots(null, refreshed), new Map());
+    const imports = edgeList(graph).filter((edge) => !edge.startsWith(folderId("")));
+    expect(imports).toEqual(["Peer.lua>Server.lua", "Server.lua>AIO.lua", "Server.lua>Peer.lua"]);
   });
 
   test("tolerates duplicate additions and edges to unknown files", () => {

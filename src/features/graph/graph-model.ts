@@ -39,8 +39,8 @@ export function displayNode(data: NodeAttrs, style: NodeStyle): NodeDisplay {
   return { ...data, ...style };
 }
 
-export const IMPORT_EDGE_TYPE = "arrow";
-export const TREE_EDGE_TYPE = "line";
+/** Every edge is a plain line drawn at a fixed screen width; see ScreenWidthLineProgram. */
+export const EDGE_TYPE = "line";
 
 export function createCodeGraph(): CodeGraph {
   return new Graph<NodeAttrs, EdgeAttrs>({ type: "directed", multi: false, allowSelfLoops: false });

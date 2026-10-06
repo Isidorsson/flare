@@ -13,8 +13,7 @@ import type { SnapshotDiff } from "./graph-diff";
 import { graphIndexFor, hubOfFile, type GraphIndex } from "./graph-index";
 import {
   createCodeGraph,
-  IMPORT_EDGE_TYPE,
-  TREE_EDGE_TYPE,
+  EDGE_TYPE,
   type CodeGraph,
   type EdgeKind,
   type NodeAttrs,
@@ -132,7 +131,7 @@ function addFiles(context: SyncContext, diff: SnapshotDiff): void {
 function addEdge(graph: CodeGraph, source: string, target: string, kind: EdgeKind): void {
   if (source === target || !graph.hasNode(source) || !graph.hasNode(target)) return;
   if (graph.hasDirectedEdge(source, target)) return;
-  graph.addDirectedEdge(source, target, { type: kind === "import" ? IMPORT_EDGE_TYPE : TREE_EDGE_TYPE, kind });
+  graph.addDirectedEdge(source, target, { type: EDGE_TYPE, kind });
 }
 
 function addEdges(context: SyncContext, diff: SnapshotDiff): void {

@@ -4,15 +4,17 @@ import { HEAT_SETTLED_MS, isTwinkling, TWINKLE_MS } from "./activity-math";
 import { readActivityPalette, type ActivityPalette } from "./activity-palette";
 import type { ActivityState } from "./activity-state";
 import { AgentOverlay } from "./agent-overlay";
+import { arcOrigin, arcPairs, isArcPair, NO_ARC_PAIRS, type ArcPairs } from "./arcs";
 import { nodeStyle, type AppearanceContext, type Focus } from "./appearance";
 import { CameraController } from "./camera-controller";
 import { noHoverDrawing } from "./canvas-draw";
-import { edgeStyle, HIDE_EDGES_ON_MOVE_THRESHOLD, restingEdgeAlpha, showsArrows, type EdgeStyle } from "./edge-appearance";
+import { edgeStyle, HIDE_EDGES_ON_MOVE_THRESHOLD, restingEdgeAlpha, type EdgeStyle } from "./edge-appearance";
+import { ScreenWidthLineProgram } from "./edge-program";
 import { browserFrameScheduler, createFrameLoop, type FrameLoop } from "./frame-loop";
 import { diffSnapshots, isEmptyDiff } from "./graph-diff";
 import { GlowLayer } from "./glow-layer";
 import type { GraphIndex } from "./graph-index";
-import { displayNode, layoutExtent, readPositions, createCodeGraph, type CodeGraph, type EdgeAttrs, type NodeAttrs, type NodeDisplay } from "./graph-model";
+import { displayNode, EDGE_TYPE, layoutExtent, readPositions, createCodeGraph, type CodeGraph, type EdgeAttrs, type NodeAttrs, type NodeDisplay } from "./graph-model";
 import type { GraphState, GraphStore } from "./graph-store";
 import { syncGraph } from "./graph-sync";
 import type { GraphSnapshot } from "./graph-types";
@@ -57,6 +59,8 @@ export class GraphScene {
   private index: GraphIndex | null = null;
   private appearance: AppearanceContext;
   private focus: Focus | null = null;
+  /** The pairs the selection overlay draws as arcs; sigma hides those edges. */
+  private arcPairs: ArcPairs = NO_ARC_PAIRS;
   private sizeFactor = 1;
   private layoutSpan = 0;
   private layoutRun: LayoutRun | null = null;
@@ -85,7 +89,8 @@ export class GraphScene {
     this.appearance = this.buildAppearance(this.store.getState());
     this.sigma = new Sigma<NodeAttrs, EdgeAttrs>(this.graph, options.container, {
       allowInvalidContainer: true,
-      defaultEdgeType: "line",
+      defaultEdgeType: EDGE_TYPE,
+      edgeProgramClasses: { [EDGE_TYPE]: ScreenWidthLineProgram },
       defaultNodeColor: this.palette.dim,
       defaultEdgeColor: this.palette.edge,
       renderEdgeLabels: false,
@@ -225,7 +230,6 @@ export class GraphScene {
       sizeFactor: this.sizeFactor,
       layoutSpan: this.layoutSpan,
       edgeAlpha: restingEdgeAlpha(edges),
-      arrows: showsArrows(edges),
     };
   }
 
@@ -246,6 +250,8 @@ export class GraphScene {
         target,
         betweenHubs: ends.every((end) => end.kind === "folder" && end.hub === end.folder),
         length: Math.hypot((ends[0]?.x ?? 0) - (ends[1]?.x ?? 0), (ends[0]?.y ?? 0) - (ends[1]?.y ?? 0)),
+        mutual: graph.hasDirectedEdge(target, source),
+        drawnAsArc: isArcPair(this.arcPairs, source, target),
       },
       this.appearance,
     );
@@ -272,7 +278,9 @@ export class GraphScene {
   }
 
   private refreshView(): void {
-    this.appearance = this.buildAppearance(this.store.getState());
+    const state = this.store.getState();
+    this.appearance = this.buildAppearance(state);
+    this.arcPairs = arcPairs(this.graph, arcOrigin(state));
     this.sigma.refresh();
   }
 
