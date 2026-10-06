@@ -41,9 +41,17 @@ function busiestFile(snapshot: GraphSnapshot): string | null {
   return top === undefined ? null : top[0];
 }
 
+/** `?select=top` picks the most imported file; any other value is taken as a file id. */
+function fileToSelect(snapshot: GraphSnapshot): string | null {
+  const wanted = params.get("select");
+  if (wanted === "top") return busiestFile(snapshot);
+  return snapshot.nodes.some((node) => node.id === wanted) ? wanted : null;
+}
+
 async function loadAndSelect(snapshot: GraphSnapshot): Promise<void> {
   await graphStore.getState().load(snapshot.root);
-  if (params.get("select") === "top") graphStore.getState().select(busiestFile(snapshot));
+  const selected = fileToSelect(snapshot);
+  if (selected !== null) graphStore.getState().select(selected);
 }
 
 /** Points the stubbed backend at a generated project and loads it into the real graph store. */

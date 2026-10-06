@@ -1,8 +1,13 @@
 import type { GraphSnapshot, Language } from "@/features/graph/graph-types";
 
+import { luaSnapshot } from "./lua-fixture";
+
 export const FIXTURE_SIZES = { small: 25, medium: 300, large: 2000 } as const;
-export const FIXTURE_NAMES = ["small", "medium", "large"] as const;
+export const GENERATED_NAMES = ["small", "medium", "large"] as const;
+/** `lua` is a hand-shaped project rather than a generated one; see lua-fixture. */
+export const FIXTURE_NAMES = [...GENERATED_NAMES, "lua"] as const;
 export type FixtureSize = (typeof FIXTURE_NAMES)[number];
+type GeneratedSize = (typeof GENERATED_NAMES)[number];
 
 export function isFixtureSize(value: string | null): value is FixtureSize {
   return FIXTURE_NAMES.some((name) => name === value);
@@ -178,6 +183,10 @@ function buildEdges(built: Built, rng: Rng): GraphSnapshot["edges"] {
 }
 
 export function generateSnapshot(size: FixtureSize, seed = 7): GraphSnapshot {
+  return size === "lua" ? luaSnapshot() : generateProject(size, seed);
+}
+
+function generateProject(size: GeneratedSize, seed: number): GraphSnapshot {
   const total = FIXTURE_SIZES[size];
   const rng = createRng(seed + total);
   const folders = buildFolders(total, rng);
