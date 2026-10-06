@@ -76,6 +76,7 @@ export class LiveEditorController {
       this.#files.subscribe((state, previous) => {
         if (state.files[this.#path]?.draft !== previous.files[this.#path]?.draft) this.#syncContent();
         if (state.changes !== previous.changes || state.turnId !== previous.turnId) this.#refreshMarks();
+        if (state.reveal !== previous.reveal) this.#showRequestedLine();
       }),
       live.subscribe((state, previous) => {
         if (state.play !== previous.play) this.#renderer.render(state.play);
@@ -83,6 +84,17 @@ export class LiveEditorController {
     );
     this.#refreshMarks();
     this.#renderer.render(live.getState().play);
+    this.#showRequestedLine();
+  }
+
+  // The request waits in the store until this file's editor exists, so it is also read once on creation.
+  #showRequestedLine(): void {
+    const { reveal } = this.#files.getState();
+    if (reveal?.path !== this.#path) return;
+    const lineNumber = Math.min(Math.max(reveal.line, 1), this.#model.getLineCount());
+    this.#editor.setPosition({ lineNumber, column: 1 });
+    this.#editor.revealLineInCenter(lineNumber);
+    this.#files.getState().clearReveal(reveal.id);
   }
 
   #refreshMarks(): void {

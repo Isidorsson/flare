@@ -1,12 +1,13 @@
 import { describe, expect, test } from "bun:test";
 
-import { diffModelUri, fileModelUri, pickLanguage, type LanguageDefinition } from "./monaco-model";
+import { diffModelUri, fileModelUri, matchLanguageHint, pickLanguage, type LanguageDefinition } from "./monaco-model";
 
 const LANGUAGES: LanguageDefinition[] = [
-  { id: "typescript", extensions: [".ts", ".tsx", ".mts"] },
+  { id: "typescript", aliases: ["TypeScript", "ts"], extensions: [".ts", ".tsx", ".mts"] },
   { id: "json", extensions: [".json"], filenames: ["composer.lock"] },
   { id: "dockerfile", extensions: [".dockerfile"], filenames: ["Dockerfile"] },
-  { id: "markdown", extensions: [".md"] },
+  { id: "markdown", aliases: ["Markdown", "md"], extensions: [".md"] },
+  { id: "shell", aliases: ["Shell Script", "shell", "bash", "sh"], extensions: [".sh"] },
   { id: "handlebars", extensions: [".hbs", ".page.hbs"] },
   { id: "plaintext" },
 ];
@@ -44,5 +45,30 @@ describe("pickLanguage", () => {
   test("falls back to plaintext", () => {
     expect(pickLanguage("C:/p/LICENSE", LANGUAGES)).toBe("plaintext");
     expect(pickLanguage("C:/p/data.unknownext", LANGUAGES)).toBe("plaintext");
+  });
+});
+
+describe("matchLanguageHint", () => {
+  test("accepts a language id, an alias or a file extension, in any case", () => {
+    expect(matchLanguageHint("json", LANGUAGES)).toBe("json");
+    expect(matchLanguageHint("TS", LANGUAGES)).toBe("typescript");
+    expect(matchLanguageHint("bash", LANGUAGES)).toBe("shell");
+    expect(matchLanguageHint("tsx", LANGUAGES)).toBe("typescript");
+  });
+
+  test("an id beats an alias and an alias beats an extension", () => {
+    const languages: LanguageDefinition[] = [
+      { id: "other", aliases: ["md"] },
+      { id: "markdown", extensions: [".md"] },
+      { id: "md" },
+    ];
+    expect(matchLanguageHint("md", languages)).toBe("md");
+    expect(matchLanguageHint("md", languages.slice(0, 2))).toBe("other");
+  });
+
+  test("returns null for a blank or unknown hint", () => {
+    expect(matchLanguageHint("", LANGUAGES)).toBeNull();
+    expect(matchLanguageHint("  ", LANGUAGES)).toBeNull();
+    expect(matchLanguageHint("brainfuck", LANGUAGES)).toBeNull();
   });
 });
