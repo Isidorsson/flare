@@ -63,7 +63,7 @@ mod tests {
         let main = &windows[0];
         assert_eq!(main.label, "main");
         assert_eq!(main.title, "Flare");
-        assert_eq!(main.min_width, Some(1140.0));
+        assert_eq!(main.min_width, Some(960.0));
         assert_eq!(main.min_height, Some(600.0));
     }
 }

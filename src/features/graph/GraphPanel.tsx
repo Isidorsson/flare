@@ -1,5 +1,4 @@
 import { Network } from "lucide-react";
-import { useEffect } from "react";
 
 import { useWorkspace } from "@/features/workspace/use-workspace";
 import { EmptyState } from "@/shared/ui/EmptyState";
@@ -8,7 +7,6 @@ import { GraphCanvas } from "./GraphCanvas";
 import { GraphFooter } from "./GraphFooter";
 import { GraphMessages } from "./GraphMessages";
 import { GraphToolbar } from "./GraphToolbar";
-import { subscribeToGraphChanges } from "./graph-events";
 import { toAbsolutePath } from "./graph-paths";
 import { graphStore, useGraph } from "./use-graph";
 
@@ -22,19 +20,6 @@ interface GraphViewProps extends GraphPanelProps {
 
 function GraphView({ root, onOpenFile }: GraphViewProps) {
   const hasNodes = useGraph((state) => (state.snapshot?.nodes.length ?? 0) > 0);
-
-  useEffect(() => {
-    void graphStore.getState().load(root);
-  }, [root]);
-
-  useEffect(() => {
-    const subscription = subscribeToGraphChanges(() => {
-      void graphStore.getState().refresh();
-    });
-    return () => {
-      subscription.cancel();
-    };
-  }, []);
 
   function handleNodeClick(id: string) {
     const state = graphStore.getState();

@@ -1,3 +1,6 @@
+export const RIGHT_VIEWS = ["files", "graph", "split"] as const;
+export type RightView = (typeof RIGHT_VIEWS)[number];
+
 export interface PaneLimits {
   min: number;
   max: number;
@@ -6,7 +9,7 @@ export interface PaneLimits {
 
 export const PANE_LIMITS = {
   sidebar: { min: 200, max: 420, initial: 280 },
-  right: { min: 520, max: 1600, initial: 820 },
+  right: { min: 300, max: 1600, initial: 420 },
   graph: { min: 220, max: 1200, initial: 380 },
   terminal: { min: 120, max: 720, initial: 260 },
 } as const satisfies Record<string, PaneLimits>;

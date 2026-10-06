@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 
 import { App } from "@/App";
 import { wireAgentEvents } from "@/features/agent-wiring/wire-agent-events";
+import { startGraphRuntime } from "@/features/graph";
 import "@/styles/index.css";
 
 const container = document.getElementById("root");
@@ -11,6 +12,7 @@ if (!container) {
 }
 
 wireAgentEvents();
+startGraphRuntime();
 
 createRoot(container).render(
   <StrictMode>

@@ -16,7 +16,7 @@
         "title": "Flare",
         "width": 1440,
         "height": 900,
-        "minWidth": 1140,
+        "minWidth": 960,
         "minHeight": 600,
         "center": true,
         "theme": "Dark",

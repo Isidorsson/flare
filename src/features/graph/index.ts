@@ -1,4 +1,5 @@
 export { GraphPanel, type GraphPanelProps } from "./GraphPanel";
+export { startGraphRuntime } from "./graph-runtime";
 export {
   graphStore,
   loadGraph,

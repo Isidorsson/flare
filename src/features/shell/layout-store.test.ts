@@ -64,6 +64,9 @@ describe("layout store defaults and actions", () => {
 
     store.getState().setGraphWidth(10);
     expect(store.getState().graphWidth).toBe(PANE_LIMITS.graph.min);
+
+    store.getState().setRightView("split");
+    expect(store.getState().rightView).toBe("split");
   });
 });
 
