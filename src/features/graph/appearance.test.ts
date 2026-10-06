@@ -9,11 +9,14 @@ import {
   type AppearanceContext,
   type NodeInfo,
 } from "./appearance";
-import { parseHex } from "./color-math";
-import { fixturePalette } from "./palette-fixture";
-import { PULSE_DURATION_MS } from "./pulse";
+import { mixColors, parseHex } from "./color-math";
+import { nodeBrightness, TWINKLE_MS } from "./activity-math";
+import { activityColor } from "./activity-palette";
+import type { NodeActivity } from "./activity-state";
+import { fixtureActivityPalette, fixturePalette } from "./palette-fixture";
 
 const palette = fixturePalette();
+const activityColors = fixtureActivityPalette();
 
 function depthColor(index: number): string {
   const color = palette.blastDepths[index];
@@ -32,7 +35,8 @@ function context(overrides: Partial<AppearanceContext> = {}): AppearanceContext 
     palette,
     colorBy: "language",
     blast: null,
-    pulses: new Map(),
+    activityColors,
+    activity: { nodes: new Map() },
     now: 10_000,
     reducedMotion: false,
     focus: null,
@@ -158,68 +162,106 @@ describe("hover focus", () => {
   });
 });
 
-describe("pulse glow and fade", () => {
-  const start = 10_000;
+describe("agent activity heat", () => {
+  const touchedAt = 10_000;
   const base = nodeStyle(node("src/a.ts"), context());
 
-  function pulsed(elapsed: number, reducedMotion = false) {
+  function activity(overrides: Partial<NodeActivity> = {}): NodeActivity {
+    return {
+      reads: 0,
+      edits: 1,
+      linesChanged: 0,
+      lastKind: "edit",
+      lastTouchedAt: touchedAt,
+      changedTurn: null,
+      ...overrides,
+    };
+  }
+
+  function heated(elapsed: number, overrides: Partial<NodeActivity> = {}, extra: Partial<AppearanceContext> = {}) {
     return nodeStyle(
       node("src/a.ts"),
       context({
-        now: start + elapsed,
-        reducedMotion,
-        pulses: new Map([["src/a.ts", { kind: "change", startedAt: start }]]),
+        now: touchedAt + elapsed,
+        activity: { nodes: new Map([["src/a.ts", activity(overrides)]]) },
+        ...extra,
       }),
     );
   }
 
-  test("starts at full glow: pulse colour, larger, labelled and on top", () => {
-    const fresh = pulsed(0);
-    expect(fresh.color).toBe(palette.pulse.change);
-    expect(fresh.size).toBeGreaterThan(base.size);
-    expect(fresh.forceLabel).toBe(true);
-    expect(fresh.zIndex).toBeGreaterThan(base.zIndex);
-  });
-
-  test("fades back towards the resting appearance", () => {
-    const early = pulsed(PULSE_DURATION_MS * 0.2);
-    const late = pulsed(PULSE_DURATION_MS * 0.9);
-    expect(early.size).toBeGreaterThan(late.size);
-    expect(late.size).toBeGreaterThan(base.size);
-    expect(distance(early.color, base.color)).toBeGreaterThan(distance(late.color, base.color));
-    expect(distance(late.color, base.color)).toBeGreaterThan(0);
-  });
-
-  test("is back to the resting appearance once expired", () => {
-    expect(pulsed(PULSE_DURATION_MS)).toEqual(base);
-    expect(pulsed(PULSE_DURATION_MS * 3)).toEqual(base);
-  });
-
-  test("reads and changes glow in different colours", () => {
-    const read = nodeStyle(
-      node("src/a.ts"),
-      context({ pulses: new Map([["src/a.ts", { kind: "read", startedAt: start }]]) }),
-    );
-    expect(read.color).toBe(palette.pulse.read);
-    expect(read.color).not.toBe(palette.pulse.change);
-  });
-
-  test("respects reduced motion: no size animation, steady colour for the whole duration", () => {
-    const early = pulsed(0, true);
-    const late = pulsed(PULSE_DURATION_MS * 0.9, true);
-    expect(early.size).toBe(base.size);
-    expect(late.size).toBe(base.size);
-    expect(early.color).toBe(late.color);
-    expect(early.color).toBe(palette.pulse.change);
-    expect(pulsed(PULSE_DURATION_MS, true)).toEqual(base);
-  });
-
-  test("ignores pulses for other files", () => {
-    const other = nodeStyle(
-      node("src/b.ts"),
-      context({ pulses: new Map([["src/a.ts", { kind: "change", startedAt: start }]]) }),
-    );
+  test("leaves untouched nodes alone", () => {
+    const other = nodeStyle(node("src/b.ts"), context({ activity: { nodes: new Map([["src/a.ts", activity()]]) } }));
     expect(other).toEqual(nodeStyle(node("src/b.ts"), context()));
+  });
+
+  test("tints a fresh node towards the colour of what happened to it", () => {
+    const edit = heated(0, { lastKind: "edit" });
+    const read = heated(0, { lastKind: "read" });
+    const editColor = activityColor(activityColors, "edit");
+    expect(distance(edit.color, editColor)).toBeLessThan(distance(base.color, editColor));
+    expect(edit.color).not.toBe(read.color);
+  });
+
+  test("cools slowly towards, but never back to, the resting colour", () => {
+    const fresh = heated(TWINKLE_MS);
+    const later = heated(10 * 60_000);
+    const muchLater = heated(24 * 3_600_000);
+    expect(distance(later.color, base.color)).toBeLessThan(distance(fresh.color, base.color));
+    expect(distance(muchLater.color, base.color)).toBeGreaterThan(0);
+  });
+
+  test("the tint strength is the heat brightness", () => {
+    const tint = activityColor(activityColors, "edit");
+    expect(heated(60_000).color).toBe(mixColors(base.color, tint, nodeBrightness(60_000, false)));
+  });
+
+  test("grows with edits, reads and lines changed, relative to the in-degree size", () => {
+    const plain = heated(0, { edits: 0, reads: 0 });
+    const edited = heated(0, { edits: 3, linesChanged: 100 });
+    expect(plain.size).toBe(base.size);
+    expect(edited.size).toBeCloseTo(base.size + 3 * 0.7 + 10 * 0.45, 5);
+    expect(heated(0, { edits: 0, reads: 4 }).size).toBeCloseTo(base.size + 1, 5);
+  });
+
+  test("never outgrows the maximum node size", () => {
+    expect(heated(0, { edits: 500, linesChanged: 1_000_000 }).size).toBe(MAX_NODE_SIZE);
+    const hub = nodeStyle(
+      node("src/a.ts", { inDegree: 100 }),
+      context({ activity: { nodes: new Map([["src/a.ts", activity({ edits: 9 })]]) } }),
+    );
+    expect(hub.size).toBe(MAX_NODE_SIZE);
+  });
+
+  test("forces a label and lifts the node only while it twinkles", () => {
+    const hot = heated(1000);
+    const cool = heated(TWINKLE_MS + 1);
+    expect(hot.forceLabel).toBe(true);
+    expect(hot.zIndex).toBeGreaterThan(cool.zIndex);
+    expect(cool.forceLabel).toBe(false);
+    expect(cool.zIndex).toBeGreaterThan(base.zIndex);
+  });
+
+  test("does not twinkle under reduced motion", () => {
+    const reduced = heated(275, {}, { reducedMotion: true });
+    const tint = activityColor(activityColors, "edit");
+    expect(reduced.color).toBe(mixColors(base.color, tint, nodeBrightness(275, true)));
+  });
+
+  test("keeps blast colours in blast mode but still grows", () => {
+    const style = nodeStyle(
+      node("src/mid.ts"),
+      context({ blast, now: touchedAt, activity: { nodes: new Map([["src/mid.ts", activity({ edits: 2 })]]) } }),
+    );
+    expect(style.color).toBe(depthColor(0));
+    expect(style.size).toBeGreaterThan(nodeStyle(node("src/mid.ts"), context({ blast })).size);
+  });
+
+  test("a hot node is not dimmed by hovering something else", () => {
+    const focus = { node: "src/x.ts", neighbours: new Set<string>() };
+    const dimmedPlain = nodeStyle(node("src/a.ts"), context({ focus }));
+    const hot = heated(500, {}, { focus });
+    expect(dimmedPlain.zIndex).toBe(0);
+    expect(hot.zIndex).toBe(3);
   });
 });
 

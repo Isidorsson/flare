@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 
+import { activityKindOf } from "./activity-types";
 import { blastRole } from "./appearance";
 import type { GraphApi } from "./graph-api";
 import { createGraphStore, type GraphStore } from "./graph-store";
 import type { BlastRadius, GraphSnapshot } from "./graph-types";
-import { PULSE_DURATION_MS } from "./pulse";
 
 const ROOT = "C:\\Users\\me\\app";
 
@@ -205,83 +205,116 @@ describe("loading", () => {
   });
 });
 
-describe("pulse", () => {
+describe("agent activity", () => {
   beforeEach(async () => {
     await h.store.getState().load(ROOT);
   });
 
-  test("records a pulse for an absolute Windows path inside the root", () => {
-    h.store.getState().pulse("C:\\Users\\me\\app\\src\\a.ts", "read");
-    expect(h.store.getState().pulses.get("src/a.ts")).toEqual({ kind: "read", startedAt: 1000 });
+  test("records a read for an absolute Windows path inside the root", () => {
+    h.store.getState().recordActivity({ path: "C:\\Users\\me\\app\\src\\a.ts", kind: "read" });
+    const { activity } = h.store.getState();
+    expect(activity.nodes.get("src/a.ts")).toEqual({
+      reads: 1,
+      edits: 0,
+      linesChanged: 0,
+      lastKind: "read",
+      lastTouchedAt: 1000,
+      changedTurn: null,
+    });
+    expect(activity.status).toBe("working");
+    expect(activity.current).toEqual({ kind: "read", subject: "a.ts" });
   });
 
   test("accepts workspace-relative paths", () => {
-    h.store.getState().pulse("src/b.ts", "change");
-    expect(h.store.getState().pulses.get("src/b.ts")?.kind).toBe("change");
+    h.store.getState().recordActivity({ path: "src/b.ts", kind: "edit", linesChanged: 12 });
+    const node = h.store.getState().activity.nodes.get("src/b.ts");
+    expect(node?.edits).toBe(1);
+    expect(node?.linesChanged).toBe(12);
   });
 
   test("maps differently-cased paths onto the indexed spelling", () => {
-    h.store.getState().pulse("C:/users/ME/App/SRC/A.ts", "read");
-    expect([...h.store.getState().pulses.keys()]).toEqual(["src/a.ts"]);
+    h.store.getState().recordActivity({ path: "C:/users/ME/App/SRC/A.ts", kind: "read" });
+    expect([...h.store.getState().activity.nodes.keys()]).toEqual(["src/a.ts"]);
   });
 
-  test("ignores paths outside the workspace and the root itself", () => {
-    h.store.getState().pulse("C:/elsewhere/a.ts", "read");
-    h.store.getState().pulse("../escape.ts", "read");
-    h.store.getState().pulse(ROOT, "read");
-    expect(h.store.getState().pulses.size).toBe(0);
+  test("shows a label but no node for paths outside the workspace or the root itself", () => {
+    h.store.getState().recordActivity({ path: "C:/elsewhere/a.ts", kind: "read" });
+    h.store.getState().recordActivity({ path: "../escape.ts", kind: "read" });
+    h.store.getState().recordActivity({ path: ROOT, kind: "read" });
+    const { activity } = h.store.getState();
+    expect(activity.nodes.size).toBe(0);
+    expect(activity.current?.subject).toBe("app");
+    expect(activity.status).toBe("working");
   });
 
-  test("keeps pulses for files the graph does not know yet", () => {
-    h.store.getState().pulse("src/brand-new.ts", "change");
-    expect(h.store.getState().pulses.has("src/brand-new.ts")).toBe(true);
+  test("keeps activity for files the graph does not know yet", () => {
+    h.store.getState().recordActivity({ path: "src/brand-new.ts", kind: "create" });
+    expect(h.store.getState().activity.nodes.has("src/brand-new.ts")).toBe(true);
   });
 
-  test("ignores pulses before a workspace is loaded", () => {
-    const fresh = harness().store;
-    fresh.getState().pulse("src/a.ts", "read");
-    expect(fresh.getState().pulses.size).toBe(0);
+  test("records searches and commands without a node", () => {
+    h.store.getState().recordActivity({ kind: "search", detail: "useEffect" });
+    expect(h.store.getState().activity.current).toEqual({ kind: "search", subject: "useEffect" });
+    expect(h.store.getState().activity.nodes.size).toBe(0);
   });
 
-  test("a later pulse for the same file replaces the earlier one and restarts the clock", () => {
-    h.store.getState().pulse("src/a.ts", "read");
-    h.clock.now = 1500;
-    h.store.getState().pulse("src/a.ts", "change");
-    expect(h.store.getState().pulses.get("src/a.ts")).toEqual({ kind: "change", startedAt: 1500 });
+  test("the pulse wrapper still maps read and change onto activity kinds", () => {
+    h.store.getState().recordActivity({ path: "src/a.ts", kind: activityKindOf("read") });
+    h.store.getState().recordActivity({ path: "src/b.ts", kind: activityKindOf("change") });
+    expect(h.store.getState().activity.nodes.get("src/a.ts")?.lastKind).toBe("read");
+    expect(h.store.getState().activity.nodes.get("src/b.ts")?.lastKind).toBe("edit");
   });
 
-  test("recording a pulse prunes expired ones", () => {
-    h.store.getState().pulse("src/a.ts", "read");
-    h.clock.now = 1000 + PULSE_DURATION_MS + 1;
-    h.store.getState().pulse("src/b.ts", "read");
-    expect([...h.store.getState().pulses.keys()]).toEqual(["src/b.ts"]);
+  test("setAgentStatus emits a finish event once and startTurn clears this turn's changes", () => {
+    h.store.getState().recordActivity({ path: "src/a.ts", kind: "edit" });
+    h.store.getState().setAgentStatus("done");
+    expect(h.store.getState().activity.lastEvent?.type).toBe("finish");
+    const turn = h.store.getState().activity.turn;
+    expect(h.store.getState().activity.nodes.get("src/a.ts")?.changedTurn).toBe(turn);
+    h.store.getState().startTurn();
+    expect(h.store.getState().activity.turn).toBe(turn + 1);
   });
 
-  test("expirePulses drops only the pulses that have decayed", () => {
-    h.store.getState().pulse("src/a.ts", "read");
-    h.clock.now = 2000;
-    h.store.getState().pulse("src/b.ts", "change");
-    h.store.getState().expirePulses(1000 + PULSE_DURATION_MS + 10);
-    expect([...h.store.getState().pulses.keys()]).toEqual(["src/b.ts"]);
-    h.store.getState().expirePulses(2000 + PULSE_DURATION_MS + 10);
-    expect(h.store.getState().pulses.size).toBe(0);
-  });
-
-  test("expirePulses leaves the state untouched when nothing expired", () => {
-    h.store.getState().pulse("src/a.ts", "read");
-    const before = h.store.getState().pulses;
-    h.store.getState().expirePulses(1001);
-    expect(h.store.getState().pulses).toBe(before);
-  });
-
-  test("notifies subscribers when a pulse is recorded", () => {
+  test("notifies subscribers when activity is recorded", () => {
     let notifications = 0;
     const unsubscribe = h.store.subscribe(() => {
       notifications += 1;
     });
-    h.store.getState().pulse("src/a.ts", "read");
+    h.store.getState().recordActivity({ path: "src/a.ts", kind: "read" });
     unsubscribe();
     expect(notifications).toBe(1);
+  });
+
+  test("loading another workspace starts from a blank slate", async () => {
+    h.store.getState().recordActivity({ path: "src/a.ts", kind: "edit" });
+    h.store.getState().moveCameraByUser();
+    await h.store.getState().load("C:\\Users\\me\\other");
+    expect(h.store.getState().activity.nodes.size).toBe(0);
+    expect(h.store.getState().camera.autoFit).toBe(true);
+  });
+});
+
+describe("camera preferences", () => {
+  test("a user move turns off fit and follow, and does not renotify while already free", () => {
+    h.store.getState().toggleFollow();
+    h.store.getState().moveCameraByUser();
+    const free = h.store.getState().camera;
+    expect(free).toEqual({ autoFit: false, follow: false });
+    h.store.getState().moveCameraByUser();
+    expect(h.store.getState().camera).toBe(free);
+  });
+
+  test("fit restores auto-fit and turns follow off", () => {
+    h.store.getState().toggleFollow();
+    h.store.getState().fitCamera();
+    expect(h.store.getState().camera).toEqual({ autoFit: true, follow: false });
+  });
+
+  test("follow toggles and releases auto-fit", () => {
+    h.store.getState().toggleFollow();
+    expect(h.store.getState().camera).toEqual({ autoFit: false, follow: true });
+    h.store.getState().toggleFollow();
+    expect(h.store.getState().camera.follow).toBe(false);
   });
 });
 

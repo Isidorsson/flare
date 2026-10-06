@@ -2,6 +2,7 @@ import { Radar, RefreshCw, TriangleAlert } from "lucide-react";
 
 import { IconButton } from "@/shared/ui/IconButton";
 
+import { GraphCameraControls } from "./GraphCameraControls";
 import type { ColorBy } from "./graph-store";
 import { graphStore, useGraph } from "./use-graph";
 
@@ -71,6 +72,7 @@ export function GraphToolbar() {
       <div className="pointer-events-auto flex items-center gap-1 rounded-md border border-border bg-surface-1/90 p-0.5 backdrop-blur">
         <WarningBadge />
         <ColorModeSwitch />
+        <GraphCameraControls />
         <IconButton
           icon={Radar}
           label="Blast radius"
