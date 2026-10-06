@@ -4,6 +4,32 @@ import { withAlpha } from "./color-math";
 import type { EdgeAttrs, NodeAttrs } from "./graph-model";
 import type { Palette } from "./palette";
 
+type Drawing = Pick<
+  CanvasRenderingContext2D,
+  | "fillStyle"
+  | "strokeStyle"
+  | "lineWidth"
+  | "lineCap"
+  | "lineDashOffset"
+  | "font"
+  | "save"
+  | "restore"
+  | "clearRect"
+  | "beginPath"
+  | "moveTo"
+  | "lineTo"
+  | "arc"
+  | "roundRect"
+  | "fill"
+  | "stroke"
+  | "fillText"
+  | "setLineDash"
+  | "createRadialGradient"
+>;
+
+/** The slice of the 2D context the graph overlay draws with, so drawing can be recorded in tests. */
+export type Pen = Drawing & { measureText: (text: string) => { width: number } };
+
 const HALO_RADIUS_FACTOR = 3.4;
 const HALO_INNER_FACTOR = 0.6;
 const HALO_PEAK_ALPHA = 0.6;
@@ -19,7 +45,7 @@ export interface Halo {
   intensity: number;
 }
 
-export function drawHalo(context: CanvasRenderingContext2D, halo: Halo): void {
+export function drawHalo(context: Pen, halo: Halo): void {
   const outer = halo.radius * HALO_RADIUS_FACTOR;
   const gradient = context.createRadialGradient(
     halo.x,

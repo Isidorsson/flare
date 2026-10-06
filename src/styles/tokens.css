@@ -23,6 +23,12 @@
   --color-danger: #f0605d;
   --color-info: #6aa7ff;
 
+  --color-activity-read: #78dceb;
+  --color-activity-edit: #ff9f4a;
+  --color-activity-create: #7fd99a;
+  --color-activity-finish: #deb86e;
+  --color-agent: #d97757;
+
   --font-sans: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
   --font-mono: "Cascadia Code", "Cascadia Mono", Consolas, ui-monospace, monospace;
 

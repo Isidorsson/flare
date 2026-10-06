@@ -1,10 +1,25 @@
 import { createStore, type StoreApi } from "zustand";
 
+import {
+  applyStatus,
+  beginTurn,
+  describeTouch,
+  initialActivity,
+  recordTouch,
+  type ActivityState,
+} from "./activity-state";
+import type { ActivityInput, AgentStatus } from "./activity-types";
+import {
+  cameraAfterFitRequest,
+  cameraAfterFollowToggle,
+  cameraAfterUserMove,
+  INITIAL_CAMERA,
+  type CameraPrefs,
+} from "./camera-state";
 import type { GraphApi } from "./graph-api";
-import { createNodeResolver, toGraphPath, type NodeResolver } from "./graph-paths";
+import { createNodeResolver, resolveGraphNode, type NodeResolver } from "./graph-paths";
 import type { BlastRadius, GraphSnapshot } from "./graph-types";
 import type { Point } from "./placement";
-import { isPulseActive, type Pulse, type PulseKind } from "./pulse";
 
 export type GraphStatus = "idle" | "loading" | "ready" | "error";
 export type GraphMode = "explore" | "blast";
@@ -21,7 +36,8 @@ export interface GraphData {
   error: string | null;
   snapshot: GraphSnapshot | null;
   resolver: NodeResolver | null;
-  pulses: ReadonlyMap<string, Pulse>;
+  activity: ActivityState;
+  camera: CameraPrefs;
   mode: GraphMode;
   colorBy: ColorBy;
   blast: BlastState | null;
@@ -32,8 +48,12 @@ export interface GraphActions {
   load: (root: string) => Promise<void>;
   reindex: () => Promise<void>;
   refresh: () => Promise<void>;
-  pulse: (path: string, kind: PulseKind) => void;
-  expirePulses: (now: number) => void;
+  recordActivity: (input: ActivityInput) => void;
+  setAgentStatus: (status: AgentStatus) => void;
+  startTurn: () => void;
+  moveCameraByUser: () => void;
+  fitCamera: () => void;
+  toggleFollow: () => void;
   setMode: (mode: GraphMode) => void;
   setColorBy: (colorBy: ColorBy) => void;
   inspectBlast: (path: string) => Promise<void>;
@@ -73,7 +93,8 @@ function initialData(): GraphData {
     error: null,
     snapshot: null,
     resolver: null,
-    pulses: new Map(),
+    activity: initialActivity(),
+    camera: INITIAL_CAMERA,
     mode: "explore",
     colorBy: "language",
     blast: null,
@@ -177,24 +198,10 @@ async function runBlast(context: Context, path: string): Promise<void> {
   }
 }
 
-function recordPulse(context: Context, path: string, kind: PulseKind): void {
-  const { root, resolver, pulses } = context.get();
-  if (root === null) return;
-  const relative = toGraphPath(root, path);
-  if (relative === null || relative === "") return;
-  const now = context.now();
-  const next = new Map<string, Pulse>();
-  for (const [id, pulse] of pulses) {
-    if (isPulseActive(pulse, now)) next.set(id, pulse);
-  }
-  next.set(resolver?.resolve(relative) ?? relative, { kind, startedAt: now });
-  context.set({ pulses: next });
-}
-
-function dropExpiredPulses(context: Context, now: number): void {
-  const { pulses } = context.get();
-  const active = new Map([...pulses].filter(([, pulse]) => isPulseActive(pulse, now)));
-  if (active.size !== pulses.size) context.set({ pulses: active });
+function recordActivity(context: Context, input: ActivityInput): void {
+  const { root, resolver, activity } = context.get();
+  const touch = describeTouch(input, (path) => resolveGraphNode(root, resolver, path));
+  context.set({ activity: recordTouch(activity, touch, context.now()) });
 }
 
 function switchMode(context: Context, mode: GraphMode): void {
@@ -228,11 +235,25 @@ export function createGraphStore(deps: GraphDeps): GraphStore {
       load: (root) => loadRoot(context, root),
       reindex: () => reindexCurrentRoot(context),
       refresh: () => runRefresh(context),
-      pulse: (path, kind) => {
-        recordPulse(context, path, kind);
+      recordActivity: (input) => {
+        recordActivity(context, input);
       },
-      expirePulses: (now) => {
-        dropExpiredPulses(context, now);
+      setAgentStatus: (status) => {
+        set({ activity: applyStatus(get().activity, status, context.now()) });
+      },
+      startTurn: () => {
+        set({ activity: beginTurn(get().activity) });
+      },
+      moveCameraByUser: () => {
+        const current = get().camera;
+        const next = cameraAfterUserMove(current);
+        if (next !== current) set({ camera: next });
+      },
+      fitCamera: () => {
+        set({ camera: cameraAfterFitRequest() });
+      },
+      toggleFollow: () => {
+        set({ camera: cameraAfterFollowToggle(get().camera) });
       },
       setMode: (mode) => {
         switchMode(context, mode);

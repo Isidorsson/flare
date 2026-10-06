@@ -7,7 +7,13 @@ import {
   type EdgeStyle,
   type Focus,
 } from "./appearance";
-import { createHoverDrawer, drawHalo } from "./canvas-draw";
+import { HEAT_SETTLED_MS, isTwinkling, TWINKLE_MS } from "./activity-math";
+import { readActivityPalette, type ActivityPalette } from "./activity-palette";
+import type { ActivityState } from "./activity-state";
+import { AgentOverlay } from "./agent-overlay";
+import { CameraController } from "./camera-controller";
+import { createHoverDrawer } from "./canvas-draw";
+import { browserFrameScheduler, createFrameLoop, type FrameLoop } from "./frame-loop";
 import { diffSnapshots, isEmptyDiff } from "./graph-diff";
 import {
   applyDiff,
@@ -22,14 +28,15 @@ import {
 import type { GraphState, GraphStore } from "./graph-store";
 import type { GraphSnapshot } from "./graph-types";
 import { browserScheduler, layoutIterations, startLayout, type LayoutRun } from "./layout";
+import { clock, prefersReducedMotion } from "./motion";
 import { readCssVariable, readPalette, type Palette } from "./palette";
-import { prefersReducedMotion, pulseClock, pulseIntensity } from "./pulse";
 
-const HALO_LAYER = "pulses";
+const HALO_LAYER = "halos";
+const AGENT_LAYER = "agent";
 const NODES_LAYER = "nodes";
 const SETTLE_ITERATIONS = 80;
 const HIDE_EDGES_ON_MOVE_THRESHOLD = 4000;
-const CAMERA_RESET_MS = 400;
+const NODE_REFRESH_WINDOW_MS = TWINKLE_MS + 500;
 const LABEL_SIZE = 11;
 const MIN_CAMERA_RATIO = 0.03;
 const MAX_CAMERA_RATIO = 30;
@@ -44,6 +51,7 @@ export class GraphScene {
   private readonly store: GraphStore;
   private readonly graph: CodeGraph = createCodeGraph();
   private readonly palette: Palette;
+  private readonly activityColors: ActivityPalette;
   private readonly sigma: Sigma<NodeAttrs, EdgeAttrs>;
   private readonly container: HTMLElement;
   private resizeObserver: ResizeObserver | null = null;
@@ -53,7 +61,9 @@ export class GraphScene {
   private focus: Focus | null = null;
   private layoutRun: LayoutRun | null = null;
   private layoutSettled = true;
-  private pulseFrame: number | null = null;
+  private overlay: AgentOverlay | null = null;
+  private camera: CameraController | null = null;
+  private loop: FrameLoop | null = null;
   private disposed = false;
 
   static start(options: SceneOptions): GraphScene {
@@ -71,6 +81,7 @@ export class GraphScene {
     this.store = options.store;
     this.container = options.container;
     this.palette = readPalette(readCssVariable);
+    this.activityColors = readActivityPalette(readCssVariable);
     this.appearance = this.buildAppearance(this.store.getState());
     this.sigma = new Sigma<NodeAttrs, EdgeAttrs>(this.graph, options.container, {
       allowInvalidContainer: true,
@@ -102,14 +113,15 @@ export class GraphScene {
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
     this.layoutRun?.cancel();
-    if (this.pulseFrame !== null) cancelAnimationFrame(this.pulseFrame);
+    this.loop?.dispose();
+    this.camera?.dispose();
     this.persistPositions();
     this.container.style.cursor = "";
     this.sigma.kill();
   }
 
   private attach(onNodeClick: (id: string) => void): void {
-    this.createHaloLayer();
+    this.startAgentLayers();
     this.bindEvents(onNodeClick);
     const observer = new ResizeObserver(() => {
       this.sigma.resize();
@@ -122,18 +134,46 @@ export class GraphScene {
     });
     const initial = this.store.getState().snapshot;
     if (initial !== null) this.applySnapshot(initial);
-    this.ensurePulseLoop();
+    this.loop?.wake();
   }
 
-  private createHaloLayer(): void {
+  private createLayers(): void {
     this.sigma.createCanvasContext(HALO_LAYER, { style: { pointerEvents: "none" } });
+    this.sigma.createCanvasContext(AGENT_LAYER, { style: { pointerEvents: "none" } });
     const canvases = this.sigma.getCanvases();
     const nodes = canvases[NODES_LAYER];
-    const halo = canvases[HALO_LAYER];
-    if (nodes === undefined || halo === undefined) {
+    const halos = canvases[HALO_LAYER];
+    if (nodes === undefined || halos === undefined || canvases[AGENT_LAYER] === undefined) {
       throw new Error("sigma did not create the expected render layers");
     }
-    nodes.before(halo);
+    nodes.before(halos);
+  }
+
+  private layerContext(layer: string): CanvasRenderingContext2D | null {
+    return this.sigma.getCanvases()[layer]?.getContext("2d") ?? null;
+  }
+
+  private startAgentLayers(): void {
+    const { sigma, graph, store, palette } = this;
+    this.createLayers();
+    this.overlay = new AgentOverlay({
+      sigma,
+      graph,
+      store,
+      palette,
+      colors: this.activityColors,
+      now: clock,
+      layers: {
+        halos: () => this.layerContext(HALO_LAYER),
+        agent: () => this.layerContext(AGENT_LAYER),
+      },
+    });
+    this.camera = new CameraController(sigma, store);
+    this.loop = createFrameLoop({
+      scheduler: browserFrameScheduler,
+      step: this.stepFrame,
+      heartbeat: this.beat,
+    });
   }
 
   private bindEvents(onNodeClick: (id: string) => void): void {
@@ -147,7 +187,7 @@ export class GraphScene {
       this.setFocus(null);
     });
     this.sigma.on("afterRender", () => {
-      this.drawHalos();
+      this.overlay?.draw(prefersReducedMotion());
     });
   }
 
@@ -156,8 +196,9 @@ export class GraphScene {
       palette: this.palette,
       colorBy: state.colorBy,
       blast: state.blast,
-      pulses: state.pulses,
-      now: pulseClock(),
+      activityColors: this.activityColors,
+      activity: state.activity,
+      now: clock(),
       reducedMotion: prefersReducedMotion(),
       focus: this.focus,
     };
@@ -186,7 +227,16 @@ export class GraphScene {
     const appearanceChanged =
       state.colorBy !== previous.colorBy || state.mode !== previous.mode || state.blast !== previous.blast;
     if (appearanceChanged) this.refreshView();
-    if (state.pulses !== previous.pulses) this.ensurePulseLoop();
+    if (state.activity !== previous.activity) this.onActivityChange(state.activity, previous.activity);
+    if (state.camera !== previous.camera) this.loop?.wake();
+  }
+
+  private onActivityChange(next: ActivityState, previous: ActivityState): void {
+    const { lastEvent } = next;
+    if (lastEvent !== null && lastEvent !== previous.lastEvent) {
+      this.overlay?.handleEvent(lastEvent, prefersReducedMotion());
+    }
+    this.loop?.wake();
   }
 
   private refreshView(): void {
@@ -217,11 +267,7 @@ export class GraphScene {
     this.refreshView();
     if (isEmptyDiff(diff)) return;
     const placedAll = diff.addedNodes.every((node) => stored.has(node.id));
-    if (wasEmpty && placedAll) {
-      this.fitCamera();
-    } else {
-      this.runLayout(wasEmpty);
-    }
+    if (!(wasEmpty && placedAll)) this.runLayout(wasEmpty);
   }
 
   private runLayout(full: boolean): void {
@@ -241,7 +287,7 @@ export class GraphScene {
         this.writeBack(working);
         this.layoutSettled = true;
         this.persistPositions();
-        if (full) this.fitCamera();
+        this.loop?.wake();
       },
     });
   }
@@ -260,52 +306,44 @@ export class GraphScene {
     }
   }
 
-  private fitCamera(): void {
-    const camera = this.sigma.getCamera();
-    if (prefersReducedMotion()) {
-      camera.setState({ x: 0.5, y: 0.5, ratio: 1, angle: 0 });
-      return;
-    }
-    camera.animatedReset({ duration: CAMERA_RESET_MS }).catch((error: unknown) => {
-      console.error("flare: camera reset failed", error);
-    });
-  }
-
-  private ensurePulseLoop(): void {
-    if (this.pulseFrame !== null || this.disposed) return;
-    if (this.store.getState().pulses.size === 0) return;
-    this.pulseFrame = requestAnimationFrame(this.tickPulses);
-  }
-
-  private readonly tickPulses = (): void => {
-    this.pulseFrame = null;
-    if (this.disposed) return;
-    const state = this.store.getState();
-    const touched = [...state.pulses.keys()].filter((id) => this.graph.hasNode(id));
-    state.expirePulses(pulseClock());
+  private readonly stepFrame = (deltaMs: number): boolean => {
+    const { overlay, camera } = this;
+    if (overlay === null || camera === null || this.disposed) return false;
+    const reducedMotion = prefersReducedMotion();
     this.appearance = this.buildAppearance(this.store.getState());
-    this.sigma.refresh({ partialGraph: { nodes: touched, edges: [] }, skipIndexation: true });
-    this.ensurePulseLoop();
+    const overlayBusy = overlay.step(deltaMs, reducedMotion);
+    const cameraBusy = camera.step(deltaMs, overlay.cometCameraPoint(), reducedMotion);
+    const { refreshable, hot } = this.classifyNodes();
+    const refreshed = this.refreshNodes(refreshable);
+    if (!refreshed) overlay.draw(reducedMotion);
+    return overlayBusy || cameraBusy || (!reducedMotion && hot);
   };
 
-  private drawHalos(): void {
-    const context = this.sigma.getCanvases()[HALO_LAYER]?.getContext("2d");
-    if (context === null || context === undefined) return;
-    const { width, height } = this.sigma.getDimensions();
-    context.clearRect(0, 0, width, height);
-    if (this.appearance.reducedMotion) return;
-    const now = pulseClock();
-    for (const [id, pulse] of this.appearance.pulses) {
-      const intensity = pulseIntensity(pulse, now, false);
-      const display = this.graph.hasNode(id) ? this.sigma.getNodeDisplayData(id) : undefined;
-      if (intensity <= 0 || display === undefined) continue;
-      const point = this.sigma.graphToViewport(this.graph.getNodeAttributes(id));
-      drawHalo(context, {
-        ...point,
-        radius: this.sigma.scaleSize(display.size),
-        color: this.palette.pulse[pulse.kind],
-        intensity,
-      });
+  private readonly beat = (): boolean => {
+    const { nodes } = this.store.getState().activity;
+    const now = clock();
+    this.appearance = this.buildAppearance(this.store.getState());
+    this.refreshNodes([...nodes.keys()]);
+    return [...nodes.values()].some((activity) => now - activity.lastTouchedAt < HEAT_SETTLED_MS);
+  };
+
+  private classifyNodes(): { refreshable: string[]; hot: boolean } {
+    const now = clock();
+    const refreshable: string[] = [];
+    let hot = false;
+    for (const [id, activity] of this.store.getState().activity.nodes) {
+      const elapsed = now - activity.lastTouchedAt;
+      if (elapsed >= NODE_REFRESH_WINDOW_MS || !this.graph.hasNode(id)) continue;
+      refreshable.push(id);
+      hot ||= isTwinkling(elapsed);
     }
+    return { refreshable, hot };
+  }
+
+  private refreshNodes(ids: readonly string[]): boolean {
+    const nodes = ids.filter((id) => this.graph.hasNode(id));
+    if (nodes.length === 0) return false;
+    this.sigma.refresh({ partialGraph: { nodes, edges: [] }, skipIndexation: true });
+    return true;
   }
 }

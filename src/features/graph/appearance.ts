@@ -1,15 +1,15 @@
+import { grownSize, isTwinkling, nodeBrightness } from "./activity-math";
+import { activityColor, type ActivityPalette } from "./activity-palette";
+import type { ActivityState, NodeActivity } from "./activity-state";
 import { mixColors, withAlpha } from "./color-math";
 import type { BlastState, ColorBy } from "./graph-store";
 import { hashString } from "./graph-paths";
 import type { Language } from "./graph-types";
 import type { Palette } from "./palette";
-import { pulseIntensity, type Pulse } from "./pulse";
 
 export const MIN_NODE_SIZE = 3;
 export const MAX_NODE_SIZE = 11;
 const SIZE_PER_ROOT_DEGREE = 1.4;
-const PULSE_SIZE_BOOST = 0.8;
-const PULSE_BASE_MIX = 0.35;
 const FOCUS_DIM_MIX = 0.65;
 const OUTSIDE_EDGE_ALPHA = 0.18;
 const DEFAULT_EDGE_ALPHA = 0.55;
@@ -23,9 +23,10 @@ export interface Focus {
 
 export interface AppearanceContext {
   readonly palette: Palette;
+  readonly activityColors: ActivityPalette;
   readonly colorBy: ColorBy;
   readonly blast: BlastState | null;
-  readonly pulses: ReadonlyMap<string, Pulse>;
+  readonly activity: Pick<ActivityState, "nodes">;
   readonly now: number;
   readonly reducedMotion: boolean;
   readonly focus: Focus | null;
@@ -105,32 +106,39 @@ function isOutOfFocus(id: string, focus: Focus | null): boolean {
   return focus !== null && focus.node !== id && !focus.neighbours.has(id);
 }
 
-export function nodeStyle(info: NodeInfo, ctx: AppearanceContext): NodeStyle {
-  const role = blastRole(ctx.blast, info.id);
+function tintedColor(
+  info: NodeInfo,
+  role: BlastRole,
+  activity: NodeActivity | undefined,
+  ctx: AppearanceContext,
+): string {
   const color = baseColor(info, role, ctx);
-  const dimmed = role.kind === "inactive" && isOutOfFocus(info.id, ctx.focus);
-  const base: NodeStyle = {
-    color: dimmed ? mixColors(color, ctx.palette.background, FOCUS_DIM_MIX) : color,
-    size: nodeSize(info.inDegree),
-    label: info.label,
-    zIndex: role.kind === "outside" || dimmed ? 0 : 1,
-    forceLabel: role.kind === "origin" || ctx.focus?.node === info.id,
-    highlighted: role.kind === "origin" || ctx.focus?.node === info.id,
-  };
-  return withPulse(base, ctx.pulses.get(info.id), ctx);
+  if (activity === undefined || role.kind !== "inactive") return color;
+  const tint = activityColor(ctx.activityColors, activity.lastKind);
+  return mixColors(color, tint, nodeBrightness(ctx.now - activity.lastTouchedAt, ctx.reducedMotion));
 }
 
-function withPulse(style: NodeStyle, pulse: Pulse | undefined, ctx: AppearanceContext): NodeStyle {
-  if (pulse === undefined) return style;
-  const intensity = pulseIntensity(pulse, ctx.now, ctx.reducedMotion);
-  if (intensity <= 0) return style;
-  const mix = PULSE_BASE_MIX + (1 - PULSE_BASE_MIX) * intensity;
+function restingZIndex(role: BlastRole, dimmed: boolean, activity: NodeActivity | undefined, hot: boolean): number {
+  if (role.kind === "outside" || dimmed) return 0;
+  if (hot) return 3;
+  return activity === undefined ? 1 : 2;
+}
+
+export function nodeStyle(info: NodeInfo, ctx: AppearanceContext): NodeStyle {
+  const role = blastRole(ctx.blast, info.id);
+  const activity = ctx.activity.nodes.get(info.id);
+  const hot = activity !== undefined && isTwinkling(ctx.now - activity.lastTouchedAt);
+  const dimmed = role.kind === "inactive" && !hot && isOutOfFocus(info.id, ctx.focus);
+  const color = tintedColor(info, role, activity, ctx);
+  const focused = role.kind === "origin" || ctx.focus?.node === info.id;
+  const base = nodeSize(info.inDegree);
   return {
-    ...style,
-    color: mixColors(style.color, ctx.palette.pulse[pulse.kind], mix),
-    size: ctx.reducedMotion ? style.size : style.size * (1 + PULSE_SIZE_BOOST * intensity),
-    zIndex: 3,
-    forceLabel: true,
+    color: dimmed ? mixColors(color, ctx.palette.background, FOCUS_DIM_MIX) : color,
+    size: activity === undefined ? base : grownSize(base, activity, MAX_NODE_SIZE),
+    label: info.label,
+    zIndex: restingZIndex(role, dimmed, activity, hot),
+    forceLabel: focused || hot,
+    highlighted: focused,
   };
 }
 

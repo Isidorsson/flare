@@ -71,3 +71,11 @@ export function createNodeResolver(ids: Iterable<string>): NodeResolver {
     resolve: (path) => (exact.has(path) ? path : (folded.get(path.toLowerCase()) ?? null)),
   };
 }
+
+/** The node id a tool path refers to: the indexed id when known, else the clean workspace-relative path. */
+export function resolveGraphNode(root: string | null, resolver: NodeResolver | null, path: string): string | null {
+  if (root === null) return null;
+  const relative = toGraphPath(root, path);
+  if (relative === null || relative === "") return null;
+  return resolver?.resolve(relative) ?? relative;
+}
