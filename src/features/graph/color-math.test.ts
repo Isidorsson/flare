@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { clamp01, fromHsl, mixColors, muteColor, parseHex, toHsl, withAlpha } from "./color-math";
+import { clamp01, fromHsl, mixColors, muteColor, parseHex, toHsl, withAlpha, withPremultipliedAlpha } from "./color-math";
 
 describe("color math", () => {
   test("parses #rrggbb in either case with surrounding whitespace", () => {
@@ -47,6 +47,12 @@ describe("color math", () => {
 
   test("muting a grey changes only its lightness", () => {
     expect(muteColor("#808080", { saturation: 0.3, lightness: 0.5 })).toBe("#404040");
+  });
+
+  test("premultiplies channels for sigma", () => {
+    expect(withPremultipliedAlpha("#ff8000", 0.5)).toBe("rgba(128, 64, 0, 0.500)");
+    expect(withPremultipliedAlpha("#ffffff", 0)).toBe("rgba(0, 0, 0, 0.000)");
+    expect(withPremultipliedAlpha("#102030", 4)).toBe("rgba(16, 32, 48, 1.000)");
   });
 
   test("produces rgba strings with a clamped alpha", () => {

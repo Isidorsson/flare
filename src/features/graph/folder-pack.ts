@@ -1,10 +1,15 @@
 import type { DirNode } from "./directory-tree";
+import { SEED_SPACING } from "./layout-params";
 import type { Point } from "./placement";
+import { OWN, refineOffsets, weightMatrix, type Affinity } from "./sibling-layout";
 
-export const SEED_SPACING = 4;
+/** In a sunflower arrangement neighbours sit about 1.9 radial steps apart, so the step is that much smaller than the spacing. */
+const SUNFLOWER_STEP = 0.53;
 const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
-const HUB_RADIUS_FACTOR = 1.6;
-const GAP_FACTOR = 1.4;
+const HUB_RADIUS_FACTOR = 1.3;
+const GAP_FACTOR = 0.55;
+/** Sunflower blobs are not perfect discs, so neighbours may tuck into each other's edges; the final push settles any touching files. */
+const PACK_SHRINK = 0.72;
 const RING_STEP_FACTOR = 0.35;
 const ARC_STEP_FACTOR = 0.7;
 const MIN_RING_STEPS = 10;
@@ -63,14 +68,22 @@ export function packCircles(radii: readonly number[]): Point[] {
 }
 
 function blobRadius(files: number, spacing: number): number {
-  return files === 0 ? 0 : spacing * Math.sqrt(files) + spacing / 2;
+  return files === 0 ? 0 : spacing * SUNFLOWER_STEP * Math.sqrt(files) + spacing / 2;
 }
 
-function packDir(dir: DirNode, spacing: number): PackedDir {
-  const children = dir.dirs.map((child) => packDir(child, spacing));
+interface PackContext {
+  readonly spacing: number;
+  readonly affinity: Affinity;
+}
+
+function packDir(dir: DirNode, context: PackContext): PackedDir {
+  const { spacing, affinity } = context;
+  const children = dir.dirs.map((child) => packDir(child, context));
   const own = Math.max(blobRadius(dir.files.length, spacing), spacing * HUB_RADIUS_FACTOR);
   const gap = spacing * GAP_FACTOR;
-  const offsets = packCircles([own, ...children.map((child) => child.radius + gap)]);
+  const radii = [own, ...children.map((child) => child.radius * PACK_SHRINK + gap)];
+  const names = [OWN, ...children.map((child) => child.dir.path)];
+  const offsets = refineOffsets(radii, packCircles(radii), weightMatrix(affinity, dir.path, names));
   const placed = children.map((packed, index) => ({ packed, offset: offsets[index + 1] ?? { x: 0, y: 0 } }));
   const extent = placed.reduce((far, { packed, offset }) => Math.max(far, Math.hypot(offset.x, offset.y) + packed.radius), own);
   return { dir, radius: extent, children: placed };
@@ -78,7 +91,7 @@ function packDir(dir: DirNode, spacing: number): PackedDir {
 
 function seedFiles(files: readonly string[], center: Point, spacing: number, out: Map<string, Point>): void {
   files.forEach((id, index) => {
-    const distance = spacing * Math.sqrt(index + 0.5);
+    const distance = spacing * SUNFLOWER_STEP * Math.sqrt(index + 0.5);
     const angle = index * GOLDEN_ANGLE;
     out.set(id, { x: center.x + Math.cos(angle) * distance, y: center.y + Math.sin(angle) * distance });
   });
@@ -92,9 +105,9 @@ function seedDir(packed: PackedDir, center: Point, spacing: number, out: { files
   }
 }
 
-/** Gives every folder its own disc, packed beside its siblings, with its files fanned around its hub. */
-export function packDirectories(tree: DirNode, spacing: number = SEED_SPACING): Seeds {
+/** Gives every folder its own disc, packed beside its siblings (closer to the ones it imports), with its files fanned around its hub. */
+export function packDirectories(tree: DirNode, affinity: Affinity = new Map(), spacing: number = SEED_SPACING): Seeds {
   const out = { files: new Map<string, Point>(), folders: new Map<string, Point>() };
-  seedDir(packDir(tree, spacing), { x: 0, y: 0 }, spacing, out);
+  seedDir(packDir(tree, { spacing, affinity }), { x: 0, y: 0 }, spacing, out);
   return out;
 }

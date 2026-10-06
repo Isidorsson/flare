@@ -1,5 +1,6 @@
 import { graphStore, recordAgentActivity } from "@/features/graph";
 import type { ColorBy } from "@/features/graph/graph-store";
+import type { GraphSnapshot } from "@/features/graph/graph-types";
 import { workspaceStore } from "@/features/workspace/use-workspace";
 
 import { agentScript, generateSnapshot, isFixtureSize, type FixtureSize, type ScriptStep } from "./graph-fixtures";
@@ -33,6 +34,18 @@ export function applyZoomParam(): void {
   if (zoom > 0 && zoom !== 1) document.documentElement.style.setProperty("zoom", String(zoom));
 }
 
+function busiestFile(snapshot: GraphSnapshot): string | null {
+  const counts = new Map<string, number>();
+  for (const { target } of snapshot.edges) counts.set(target, (counts.get(target) ?? 0) + 1);
+  const [top] = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+  return top === undefined ? null : top[0];
+}
+
+async function loadAndSelect(snapshot: GraphSnapshot): Promise<void> {
+  await graphStore.getState().load(snapshot.root);
+  if (params.get("select") === "top") graphStore.getState().select(busiestFile(snapshot));
+}
+
 /** Points the stubbed backend at a generated project and loads it into the real graph store. */
 export function openFixture(size: FixtureSize): ScriptStep[] {
   const snapshot = generateSnapshot(size);
@@ -40,7 +53,7 @@ export function openFixture(size: FixtureSize): ScriptStep[] {
   workspaceStore.getState().setRoot(snapshot.root);
   graphStore.getState().setColorBy(colorFromParams());
   graphStore.getState().setLevel(params.get("level") === "files" ? "files" : "overview");
-  void graphStore.getState().load(snapshot.root);
+  void loadAndSelect(snapshot);
   return agentScript(snapshot);
 }
 

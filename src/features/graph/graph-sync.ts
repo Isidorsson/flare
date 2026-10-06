@@ -23,6 +23,7 @@ import { baseName } from "./graph-paths";
 import type { GraphEdgeData, GraphNodeData, GraphSnapshot } from "./graph-types";
 import { fileSize, hubSize } from "./node-scale";
 import { jitterAround, placeNear, type Point } from "./placement";
+import { buildAffinity } from "./sibling-layout";
 
 const ORIGIN: Point = { x: 0, y: 0 };
 
@@ -177,7 +178,7 @@ export function syncGraph(
   stored: ReadonlyMap<string, Point>,
 ): GraphIndex {
   const index = graphIndexFor(snapshot);
-  const seeds = graph.order === 0 ? packDirectories(index.tree) : null;
+  const seeds = graph.order === 0 ? packDirectories(index.tree, buildAffinity(snapshot.edges)) : null;
   const context: SyncContext = { graph, index, stored, seeds };
   dropRemoved(graph, diff);
   dropStaleFolders(context);

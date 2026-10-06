@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import type { AppearanceContext } from "./appearance";
-import { edgeStyle, restingEdgeAlpha, showsArrows, type EdgeInfo } from "./edge-appearance";
+import { edgeStyle, lengthFade, restingEdgeAlpha, showsArrows, type EdgeInfo } from "./edge-appearance";
 import { sizeScale } from "./node-scale";
 import { fixtureActivityPalette, fixturePalette } from "./palette-fixture";
 
@@ -20,6 +20,8 @@ function context(overrides: Partial<AppearanceContext> = {}): AppearanceContext 
     focus: null,
     selected: null,
     scale: sizeScale(100, 10),
+    sizeFactor: 1,
+    layoutSpan: 100,
     edgeAlpha: 0.3,
     arrows: true,
     ...overrides,
@@ -27,11 +29,11 @@ function context(overrides: Partial<AppearanceContext> = {}): AppearanceContext 
 }
 
 function importEdge(source: string, target: string): EdgeInfo {
-  return { kind: "import", source, target, betweenHubs: false };
+  return { kind: "import", source, target, betweenHubs: false, length: 10 };
 }
 
 function treeEdge(source: string, target: string, betweenHubs: boolean): EdgeInfo {
-  return { kind: "tree", source, target, betweenHubs };
+  return { kind: "tree", source, target, betweenHubs, length: 10 };
 }
 
 function depthColor(index: number): string {
@@ -57,8 +59,8 @@ describe("restingEdgeAlpha", () => {
   });
 
   test("stays within sensible bounds at the extremes", () => {
-    expect(restingEdgeAlpha(0)).toBeLessThanOrEqual(0.5);
-    expect(restingEdgeAlpha(10_000_000)).toBeGreaterThanOrEqual(0.05);
+    expect(restingEdgeAlpha(0)).toBeLessThanOrEqual(0.75);
+    expect(restingEdgeAlpha(10_000_000)).toBeCloseTo(0.16, 5);
   });
 
   test("keeps arrowheads for small graphs only", () => {
@@ -67,10 +69,29 @@ describe("restingEdgeAlpha", () => {
   });
 });
 
+describe("lengthFade", () => {
+  test("leaves short edges alone and fades long ones towards a floor", () => {
+    expect(lengthFade(0, 100)).toBe(1);
+    expect(lengthFade(30, 100)).toBeLessThan(1);
+    expect(lengthFade(30, 100)).toBeGreaterThan(lengthFade(60, 100));
+    expect(lengthFade(500, 100)).toBeCloseTo(0.3);
+  });
+
+  test("copes with a layout that has no extent", () => {
+    expect(lengthFade(5, 0)).toBe(1);
+  });
+});
+
 describe("import edges", () => {
+  test("fade as they get longer", () => {
+    const short = edgeStyle({ ...importEdge("src/a.ts", "src/b.ts"), length: 5 }, context());
+    const long = edgeStyle({ ...importEdge("src/a.ts", "src/b.ts"), length: 80 }, context());
+    expect(short.color).not.toBe(long.color);
+  });
+
   test("are faint and thin at rest, and drawn as arrows or plain lines by density", () => {
     const style = edgeStyle(importEdge("src/a.ts", "src/b.ts"), context());
-    expect(style.size).toBeLessThan(1);
+    expect(style.size).toBeLessThanOrEqual(1);
     expect(style.color.startsWith("rgba(")).toBe(true);
     expect(style.type).toBe("arrow");
     expect(edgeStyle(importEdge("src/a.ts", "src/b.ts"), context({ arrows: false })).type).toBe("line");

@@ -3,6 +3,8 @@ import type { CodeGraph } from "./graph-model";
 
 const SAME_FOLDER_WEIGHT = 1;
 const OTHER_FOLDER_WEIGHT = 0.7;
+const OTHER_FOLDER_CAP = 1.1;
+const HOME_WEIGHT = 1.4;
 const DISC_GROWTH = 1.18;
 const MIN_DISC = 1;
 
@@ -71,11 +73,12 @@ export function buildRelaxModel(graph: CodeGraph, ids: readonly string[], xs: Fl
     files.push(self);
     hubs.push(hub);
     reaches.push(reach.get(hubId) ?? MIN_DISC);
-    for (const other of importNeighbours(graph, id)) {
-      const index = position.get(other.id);
-      if (index === undefined) continue;
-      neighbours.push(index);
-      weights.push(other.same ? SAME_FOLDER_WEIGHT : OTHER_FOLDER_WEIGHT);
+    const found = importNeighbours(graph, id).filter((other) => position.has(other.id));
+    const abroad = found.filter((other) => !other.same).length;
+    const abroadWeight = Math.min(OTHER_FOLDER_WEIGHT, OTHER_FOLDER_CAP / Math.max(abroad, 1));
+    for (const other of found) {
+      neighbours.push(position.get(other.id) ?? self);
+      weights.push(other.same ? SAME_FOLDER_WEIGHT : abroadWeight);
     }
     offsets.push(neighbours.length);
   }
@@ -96,22 +99,23 @@ interface Moved {
   y: number;
 }
 
-function neighbourMiddle(model: RelaxModel, slot: number): Moved | null {
+/** The weighted middle of a file's imports and its folder's hub, which keeps a folder's files gathered around its name. */
+function at(values: Float64Array | Int32Array, index: number): number {
+  return values[index] ?? 0;
+}
+
+function neighbourMiddle(model: RelaxModel, slot: number): Moved {
   const { xs, ys, offsets, neighbours, weights } = model;
-  const start = offsets[slot] ?? 0;
-  const end = offsets[slot + 1] ?? start;
-  if (end <= start) return null;
-  let sumX = 0;
-  let sumY = 0;
-  let total = 0;
-  for (let at = start; at < end; at += 1) {
-    const other = neighbours[at] ?? 0;
-    const weight = weights[at] ?? 0;
-    sumX += (xs[other] ?? 0) * weight;
-    sumY += (ys[other] ?? 0) * weight;
-    total += weight;
+  const hub = at(model.hubs, slot);
+  const sum = { x: at(xs, hub) * HOME_WEIGHT, y: at(ys, hub) * HOME_WEIGHT, weight: HOME_WEIGHT };
+  for (let index = at(offsets, slot); index < at(offsets, slot + 1); index += 1) {
+    const other = at(neighbours, index);
+    const weight = at(weights, index);
+    sum.x += at(xs, other) * weight;
+    sum.y += at(ys, other) * weight;
+    sum.weight += weight;
   }
-  return { x: sumX / total, y: sumY / total };
+  return { x: sum.x / sum.weight, y: sum.y / sum.weight };
 }
 
 function withinReach(model: RelaxModel, slot: number, point: Moved): Moved {
@@ -131,7 +135,7 @@ function pulled(model: RelaxModel, slot: number, pull: number): Moved {
   const x = model.xs[self] ?? 0;
   const y = model.ys[self] ?? 0;
   const middle = neighbourMiddle(model, slot);
-  const target = middle === null ? { x, y } : { x: x + (middle.x - x) * pull, y: y + (middle.y - y) * pull };
+  const target = { x: x + (middle.x - x) * pull, y: y + (middle.y - y) * pull };
   return withinReach(model, slot, target);
 }
 

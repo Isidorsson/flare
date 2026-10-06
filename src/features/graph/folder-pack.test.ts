@@ -62,7 +62,7 @@ describe("packDirectories", () => {
   });
 
   test("scales with the requested spacing", () => {
-    const wide = packDirectories(buildDirectoryTree(files), 40);
+    const wide = packDirectories(buildDirectoryTree(files), new Map(), 40);
     const near = seeds.folders.get("lib");
     const far = wide.folders.get("lib");
     if (near === undefined || far === undefined) throw new Error("missing seed");

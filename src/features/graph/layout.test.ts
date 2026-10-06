@@ -5,8 +5,7 @@ import { readPositions, type CodeGraph } from "./graph-model";
 import { snapshotToGraph } from "./graph-sync";
 import type { GraphSnapshot } from "./graph-types";
 import { placementBodies, startLayout, type LayoutOptions, type LayoutScheduler } from "./layout";
-import { unitsPerPixel } from "./layout-params";
-import type { Point } from "./placement";
+import { FILE_RADIUS_SHARE, SEED_SPACING } from "./layout-params";
 
 function ringSnapshot(size: number): GraphSnapshot {
   const ids = Array.from({ length: size }, (_, index) => `src/dir${index % 3}/file${index}.ts`);
@@ -57,7 +56,6 @@ function options(scheduler: LayoutScheduler, overrides: Partial<LayoutOptions> =
   return {
     rounds: 20,
     animate: true,
-    viewportPx: 400,
     scheduler,
     onFrame: () => undefined,
     onDone: () => undefined,
@@ -71,36 +69,22 @@ function nodeDistance(graph: CodeGraph, first: string, second: string): number {
   return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
-describe("unitsPerPixel", () => {
-  test("is the layout span per usable pixel, with room to grow", () => {
-    expect(unitsPerPixel(1000, 472)).toBeGreaterThan(1000 / 400);
-    expect(unitsPerPixel(1000, 872)).toBeLessThan(unitsPerPixel(1000, 472));
-  });
-
-  test("survives an empty or unmeasured layout", () => {
-    expect(unitsPerPixel(0, 0)).toBeGreaterThan(0);
-    expect(Number.isFinite(unitsPerPixel(500, -5))).toBe(true);
-  });
-});
-
 describe("placementBodies", () => {
-  test("gives shown nodes a radius and hidden folders none", () => {
+  test("gives files and hubs a radius and hidden folders none", () => {
     const graph = snapshotToGraph(ringSnapshot(6), new Map());
-    const { ids, bodies } = placementBodies(graph, 400);
-    const index = ids.indexOf("src/dir0/file0.ts");
-    expect(bodies.radii[index]).toBeGreaterThan(0);
+    const { ids, bodies } = placementBodies(graph);
+    expect(bodies.radii[ids.indexOf("src/dir0/file0.ts")]).toBeCloseTo(FILE_RADIUS_SHARE * SEED_SPACING);
+    expect(bodies.radii[ids.indexOf(folderId("src/dir0"))]).toBeGreaterThan(bodies.radii[ids.indexOf("src/dir0/file0.ts")] ?? 0);
     graph.setNodeAttribute(folderId("src/dir0"), "hub", "src");
-    const hidden = placementBodies(graph, 400);
+    const hidden = placementBodies(graph);
     expect(hidden.bodies.radii[hidden.ids.indexOf(folderId("src/dir0"))]).toBe(0);
   });
 
-  test("makes pixel-sized radii larger when the layout is wider", () => {
-    const graph = snapshotToGraph(ringSnapshot(6), new Map());
-    const narrow = placementBodies(graph, 400);
-    graph.updateEachNodeAttributes((_, attributes) => ({ ...attributes, x: attributes.x * 10, y: attributes.y * 10 }));
-    const wide = placementBodies(graph, 400);
-    const index = narrow.ids.indexOf("src/dir0/file0.ts");
-    expect(wide.bodies.radii[index] ?? 0).toBeGreaterThan((narrow.bodies.radii[index] ?? 0) * 5);
+  test("makes hubs far heavier than files so they hold their place", () => {
+    const { ids, bodies } = placementBodies(snapshotToGraph(ringSnapshot(6), new Map()));
+    const hub = bodies.masses?.[ids.indexOf(folderId("src/dir0"))] ?? 0;
+    const file = bodies.masses?.[ids.indexOf("src/dir0/file0.ts")] ?? Infinity;
+    expect(hub).toBeGreaterThan(file * 1000);
   });
 });
 
@@ -153,7 +137,7 @@ describe("startLayout", () => {
     const fake = fakeScheduler(1);
     startLayout(graph, options(fake.scheduler, { animate: false }));
     runToCompletion(fake.runFrame);
-    const { ids, bodies } = placementBodies(graph, 400);
+    const { ids, bodies } = placementBodies(graph);
     let deepest = 0;
     for (let first = 0; first < ids.length; first += 1) {
       for (let second = first + 1; second < ids.length; second += 1) {
@@ -161,8 +145,7 @@ describe("startLayout", () => {
         deepest = Math.max(deepest, (bodies.radii[first] ?? 0) + (bodies.radii[second] ?? 0) - distance);
       }
     }
-    const perPixel = unitsPerPixel(Math.max(...[...readPositions(graph).values()].map((point: Point) => Math.abs(point.x))) * 2, 400);
-    expect(deepest).toBeLessThan(perPixel * 1.5);
+    expect(deepest).toBeLessThan(0.05);
   });
 
   test("keeps the files of a folder nearer to their hub than to another folder's hub", () => {

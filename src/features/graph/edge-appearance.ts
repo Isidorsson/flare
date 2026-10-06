@@ -1,16 +1,16 @@
 import { blastColor, blastRole, type AppearanceContext, type BlastRole } from "./appearance";
-import { withAlpha } from "./color-math";
+import { withPremultipliedAlpha as premultiplied } from "./color-math";
 import type { EdgeKind } from "./graph-model";
 import { IMPORT_EDGE_TYPE, TREE_EDGE_TYPE } from "./graph-model";
 import type { Palette } from "./palette";
 
-const IMPORT_EDGE_SIZE = 0.55;
-const ACTIVE_EDGE_SIZE = 1.3;
+const IMPORT_EDGE_SIZE = 1;
+const ACTIVE_EDGE_SIZE = 1.6;
 const BLAST_EDGE_SIZE = 1.5;
-const TREE_EDGE_SIZE = 0.8;
-const TREE_ALPHA_OVERVIEW = 0.18;
-const TREE_ALPHA_FILES = 0.1;
-const TREE_ALPHA_FOCUSED = 0.62;
+const TREE_EDGE_SIZE = 1;
+const TREE_ALPHA_OVERVIEW = 0.7;
+const TREE_ALPHA_FILES = 0.35;
+const TREE_ALPHA_FOCUSED = 0.85;
 const BACKGROUND_EDGE_ALPHA = 0.05;
 const ACTIVE_EDGE_ALPHA = 0.85;
 const DIRECTION_ALPHA = 0.7;
@@ -18,8 +18,10 @@ const LINE_TYPE = TREE_EDGE_TYPE;
 
 const SPARSE_EDGES = 30;
 const DENSE_EDGES = 4000;
-const SPARSE_ALPHA = 0.5;
-const DENSE_ALPHA = 0.07;
+const SPARSE_ALPHA = 0.75;
+const DENSE_ALPHA = 0.16;
+const LONG_EDGE_SHARE = 0.6;
+const MIN_LENGTH_FADE = 0.3;
 const ARROW_MAX_EDGES = 350;
 export const HIDE_EDGES_ON_MOVE_THRESHOLD = 2500;
 
@@ -28,6 +30,13 @@ export function restingEdgeAlpha(edgeCount: number): number {
   const span = Math.log(DENSE_EDGES / SPARSE_EDGES);
   const t = Math.min(Math.max(Math.log(Math.max(edgeCount, 1) / SPARSE_EDGES) / span, 0), 1);
   return SPARSE_ALPHA + (DENSE_ALPHA - SPARSE_ALPHA) * t;
+}
+
+/** Long imports cross the whole map and make the most noise, so they fade towards a floor as they approach the layout's span. */
+export function lengthFade(length: number, span: number): number {
+  if (span <= 0) return 1;
+  const share = Math.min(length / (span * LONG_EDGE_SHARE), 1);
+  return 1 - (1 - MIN_LENGTH_FADE) * share;
 }
 
 export function showsArrows(edgeCount: number): boolean {
@@ -40,6 +49,8 @@ export interface EdgeInfo {
   readonly target: string;
   /** Both ends are folders that are shown as hubs. */
   readonly betweenHubs: boolean;
+  /** Distance between the two ends in layout units. */
+  readonly length: number;
 }
 
 export interface EdgeStyle {
@@ -67,7 +78,7 @@ function treeEdge(edge: EdgeInfo, ctx: AppearanceContext): EdgeStyle {
   const active = ctx.focus?.node;
   const touched = active === edge.source || active === edge.target;
   const alpha = touched ? TREE_ALPHA_FOCUSED : ctx.level === "overview" ? TREE_ALPHA_OVERVIEW : TREE_ALPHA_FILES;
-  return { color: withAlpha(ctx.palette.edge, alpha), size: TREE_EDGE_SIZE, zIndex: touched ? 2 : 1, hidden: false, type: LINE_TYPE };
+  return { color: premultiplied(ctx.palette.edge, alpha), size: TREE_EDGE_SIZE, zIndex: touched ? 2 : 1, hidden: false, type: LINE_TYPE };
 }
 
 function importType(ctx: AppearanceContext): string {
@@ -80,7 +91,7 @@ function blastEdge(edge: EdgeInfo, ctx: AppearanceContext): EdgeStyle | null {
   const color = blastEdgeColor(sourceRole, blastRole(ctx.blast, edge.target), ctx.palette);
   if (color !== null) return { color, size: BLAST_EDGE_SIZE, zIndex: 3, hidden: false, type: importType(ctx) };
   if (ctx.level === "overview") return HIDDEN;
-  const faint = withAlpha(ctx.palette.edge, BACKGROUND_EDGE_ALPHA);
+  const faint = premultiplied(ctx.palette.edge, BACKGROUND_EDGE_ALPHA);
   return { color: faint, size: IMPORT_EDGE_SIZE, zIndex: 0, hidden: false, type: importType(ctx) };
 }
 
@@ -92,7 +103,7 @@ function directionEdge(edge: EdgeInfo, ctx: AppearanceContext, active: string): 
   const outgoing = edge.source === active;
   const hue = outgoing ? ctx.palette.imports : ctx.palette.importer;
   const alpha = ctx.focus === null ? DIRECTION_ALPHA : ACTIVE_EDGE_ALPHA;
-  return { color: withAlpha(hue, alpha), size: ACTIVE_EDGE_SIZE, zIndex: 3, hidden: false, type: importType(ctx) };
+  return { color: premultiplied(hue, alpha), size: ACTIVE_EDGE_SIZE, zIndex: 3, hidden: false, type: importType(ctx) };
 }
 
 function importEdge(edge: EdgeInfo, ctx: AppearanceContext): EdgeStyle {
@@ -101,8 +112,8 @@ function importEdge(edge: EdgeInfo, ctx: AppearanceContext): EdgeStyle {
   const active = activeNode(ctx);
   if (active !== null && (edge.source === active || edge.target === active)) return directionEdge(edge, ctx, active);
   if (ctx.level === "overview") return HIDDEN;
-  const alpha = active === null ? ctx.edgeAlpha : BACKGROUND_EDGE_ALPHA;
-  return { color: withAlpha(ctx.palette.edge, alpha), size: IMPORT_EDGE_SIZE, zIndex: 1, hidden: false, type: importType(ctx) };
+  const alpha = active === null ? ctx.edgeAlpha * lengthFade(edge.length, ctx.layoutSpan) : BACKGROUND_EDGE_ALPHA;
+  return { color: premultiplied(ctx.palette.edge, alpha), size: IMPORT_EDGE_SIZE, zIndex: 1, hidden: false, type: importType(ctx) };
 }
 
 export function edgeStyle(edge: EdgeInfo, ctx: AppearanceContext): EdgeStyle {

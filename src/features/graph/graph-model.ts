@@ -53,3 +53,18 @@ export function readPositions(graph: CodeGraph): ReadonlyMap<string, Point> {
   });
   return positions;
 }
+
+/** The widest extent of the laid-out nodes, in layout units. */
+export function layoutExtent(graph: CodeGraph): number {
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+  graph.forEachNode((_, { x, y }) => {
+    minX = Math.min(minX, x);
+    maxX = Math.max(maxX, x);
+    minY = Math.min(minY, y);
+    maxY = Math.max(maxY, y);
+  });
+  return graph.order === 0 ? 0 : Math.max(maxX - minX, maxY - minY);
+}

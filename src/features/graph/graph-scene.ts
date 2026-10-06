@@ -12,15 +12,15 @@ import { browserFrameScheduler, createFrameLoop, type FrameLoop } from "./frame-
 import { diffSnapshots, isEmptyDiff } from "./graph-diff";
 import { GlowLayer } from "./glow-layer";
 import type { GraphIndex } from "./graph-index";
-import { displayNode, readPositions, createCodeGraph, type CodeGraph, type EdgeAttrs, type NodeAttrs, type NodeDisplay } from "./graph-model";
+import { displayNode, layoutExtent, readPositions, createCodeGraph, type CodeGraph, type EdgeAttrs, type NodeAttrs, type NodeDisplay } from "./graph-model";
 import type { GraphState, GraphStore } from "./graph-store";
 import { syncGraph } from "./graph-sync";
 import type { GraphSnapshot } from "./graph-types";
 import { LabelLayer } from "./label-layer";
 import { browserScheduler, startLayout, type LayoutRun } from "./layout";
-import { FALLBACK_VIEWPORT_PX, RELAX_ROUNDS, SETTLE_ROUNDS } from "./layout-params";
+import { RELAX_ROUNDS, SETTLE_ROUNDS } from "./layout-params";
 import { clock, prefersReducedMotion } from "./motion";
-import { sizeScale } from "./node-scale";
+import { fitSizeFactor, sizeScale } from "./node-scale";
 import { readCssVariable, readPalette, type Palette } from "./palette";
 import { AGENT_LAYER, createSceneLayers, GLOW_LAYER, HALO_LAYER, LABEL_LAYER, type SceneLayers } from "./scene-layers";
 
@@ -28,7 +28,10 @@ const NODE_REFRESH_WINDOW_MS = TWINKLE_MS + 500;
 const MIN_CAMERA_RATIO = 0.03;
 const MAX_CAMERA_RATIO = 30;
 const STAGE_PADDING = 36;
+const MIN_EDGE_THICKNESS = 1;
 const EMPTY_SCALE = sizeScale(0, 0);
+const FIT_CAMERA = { x: 0.5, y: 0.5, ratio: 1, angle: 0 };
+const FACTOR_EPSILON = 0.03;
 
 export interface SceneOptions {
   container: HTMLElement;
@@ -54,6 +57,8 @@ export class GraphScene {
   private index: GraphIndex | null = null;
   private appearance: AppearanceContext;
   private focus: Focus | null = null;
+  private sizeFactor = 1;
+  private layoutSpan = 0;
   private layoutRun: LayoutRun | null = null;
   private layoutSettled = true;
   private overlay: AgentOverlay | null = null;
@@ -87,6 +92,7 @@ export class GraphScene {
       renderLabels: false,
       zIndex: true,
       stagePadding: STAGE_PADDING,
+      minEdgeThickness: MIN_EDGE_THICKNESS,
       minCameraRatio: MIN_CAMERA_RATIO,
       maxCameraRatio: MAX_CAMERA_RATIO,
       defaultDrawNodeHover: noHoverDrawing,
@@ -178,8 +184,21 @@ export class GraphScene {
       this.setFocus(null);
     });
     this.sigma.on("afterRender", () => {
+      this.syncSizeFactor();
       this.drawOverlays(prefersReducedMotion());
     });
+  }
+
+  /** Files shrink when the fitted view is crowded; recomputed after each render, and only repainted if it really moved. */
+  private syncSizeFactor(): void {
+    if (this.index === null) return;
+    const origin = this.sigma.graphToViewport({ x: 0, y: 0 }, { cameraState: FIT_CAMERA });
+    const unit = this.sigma.graphToViewport({ x: 1, y: 0 }, { cameraState: FIT_CAMERA });
+    const factor = fitSizeFactor(Math.hypot(unit.x - origin.x, unit.y - origin.y), this.index.scale);
+    if (Math.abs(factor - this.sizeFactor) < FACTOR_EPSILON) return;
+    this.sizeFactor = factor;
+    this.appearance = this.buildAppearance(this.store.getState());
+    this.sigma.refresh({ schedule: true });
   }
 
   private drawOverlays(reducedMotion: boolean): void {
@@ -203,6 +222,8 @@ export class GraphScene {
       focus: this.focus,
       selected: state.selected,
       scale: this.index?.scale ?? EMPTY_SCALE,
+      sizeFactor: this.sizeFactor,
+      layoutSpan: this.layoutSpan,
       edgeAlpha: restingEdgeAlpha(edges),
       arrows: showsArrows(edges),
     };
@@ -224,6 +245,7 @@ export class GraphScene {
         source,
         target,
         betweenHubs: ends.every((end) => end.kind === "folder" && end.hub === end.folder),
+        length: Math.hypot((ends[0]?.x ?? 0) - (ends[1]?.x ?? 0), (ends[0]?.y ?? 0) - (ends[1]?.y ?? 0)),
       },
       this.appearance,
     );
@@ -282,6 +304,7 @@ export class GraphScene {
     this.labels.setIndex(this.index);
     this.glow.setIndex(this.index);
     this.glow.refit(this.graph, this.index);
+    this.layoutSpan = layoutExtent(this.graph);
     this.sigma.setSetting("hideEdgesOnMove", next.edges.length > HIDE_EDGES_ON_MOVE_THRESHOLD);
     this.refreshView();
     const placedAll = this.graph.nodes().every((id) => stored.has(id));
@@ -293,11 +316,9 @@ export class GraphScene {
     this.layoutSettled = false;
     const working = this.graph.copy();
     const reducedMotion = prefersReducedMotion();
-    const side = Math.min(this.container.clientWidth, this.container.clientHeight);
     this.layoutRun = startLayout(working, {
       rounds: full ? RELAX_ROUNDS : SETTLE_ROUNDS,
       animate: !reducedMotion,
-      viewportPx: side > 0 ? side : FALLBACK_VIEWPORT_PX,
       scheduler: browserScheduler,
       onFrame: () => {
         this.writeBack(working);
@@ -318,6 +339,7 @@ export class GraphScene {
       return { ...attributes, x, y };
     });
     this.glow.refit(this.graph, this.index);
+    this.layoutSpan = layoutExtent(this.graph);
   }
 
   private persistPositions(): void {

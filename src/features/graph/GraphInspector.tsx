@@ -107,7 +107,7 @@ function Inspector({ model, onOpen }: { model: InspectorModel; onOpen: (id: stri
   return (
     <aside
       aria-label={`Details for ${model.name}`}
-      className="absolute inset-y-0 right-0 z-10 flex w-72 max-w-[88%] flex-col overflow-y-auto border-l border-border bg-bg/95 backdrop-blur-sm"
+      className="absolute inset-y-0 right-0 z-10 flex w-72 max-w-[72%] flex-col overflow-y-auto border-l border-border bg-bg/95 backdrop-blur-sm"
     >
       <Header model={model} />
       <div className="flex flex-wrap items-center gap-1.5 px-3 pb-2.5">

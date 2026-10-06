@@ -1,10 +1,11 @@
 import type { CodeGraph } from "./graph-model";
 import {
+  FILE_RADIUS_SHARE,
   FINAL_SEPARATION_PASSES,
+  HUB_RADIUS_SHARE,
   RELAX_PULL,
-  SEPARATION_GAP_PX,
+  SEED_SPACING,
   SEPARATION_PASSES_PER_ROUND,
-  unitsPerPixel,
 } from "./layout-params";
 import { buildRelaxModel, relaxPull, type RelaxModel } from "./relax";
 import { createSeparator, type Bodies, type Separator } from "./separation";
@@ -12,6 +13,8 @@ import { createSeparator, type Bodies, type Separator } from "./separation";
 const FRAME_BUDGET_MS = 10;
 const MIN_NODES_TO_LAYOUT = 2;
 const FINAL_STEP = 6;
+const HUB_MASS = 1e6;
+const MIN_MASS = 1e-9;
 
 export interface LayoutScheduler {
   requestFrame: (callback: () => void) => number;
@@ -31,8 +34,6 @@ export interface LayoutOptions {
   /** How many pull-and-push rounds to run before the final untangling. */
   rounds: number;
   animate: boolean;
-  /** The shorter side of the view in pixels, used to turn node sizes into layout units. */
-  viewportPx: number;
   onFrame: () => void;
   onDone: () => void;
   scheduler: LayoutScheduler;
@@ -47,39 +48,27 @@ interface Placement {
   readonly bodies: Bodies;
 }
 
-function isShown(graph: CodeGraph, id: string): boolean {
+function radiusOf(graph: CodeGraph, id: string): number {
   const attributes = graph.getNodeAttributes(id);
-  return attributes.kind === "file" || attributes.hub === attributes.folder;
+  if (attributes.kind === "file") return FILE_RADIUS_SHARE * SEED_SPACING;
+  return attributes.hub === attributes.folder ? HUB_RADIUS_SHARE * SEED_SPACING : 0;
 }
 
-function extentOf(graph: CodeGraph): number {
-  let minX = Infinity;
-  let maxX = -Infinity;
-  let minY = Infinity;
-  let maxY = -Infinity;
-  graph.forEachNode((_, { x, y }) => {
-    minX = Math.min(minX, x);
-    maxX = Math.max(maxX, x);
-    minY = Math.min(minY, y);
-    maxY = Math.max(maxY, y);
-  });
-  return Math.max(maxX - minX, maxY - minY);
-}
-
-/** Node sizes are pixels at fit zoom; the layout lives in its own units, so sizes are converted by the fitted scale. */
-export function placementBodies(graph: CodeGraph, viewportPx: number): Placement {
-  const perPixel = unitsPerPixel(extentOf(graph), viewportPx);
+/** The layout lives in its own units: files are circles a little under half a spacing wide, hubs a bit bigger. */
+export function placementBodies(graph: CodeGraph): Placement {
   const ids = graph.nodes();
   const xs = new Float64Array(ids.length);
   const ys = new Float64Array(ids.length);
   const radii = new Float64Array(ids.length);
+  const masses = new Float64Array(ids.length);
   ids.forEach((id, index) => {
     const attributes = graph.getNodeAttributes(id);
     xs[index] = attributes.x;
     ys[index] = attributes.y;
-    radii[index] = isShown(graph, id) ? (attributes.size + SEPARATION_GAP_PX / 2) * perPixel : 0;
+    radii[index] = radiusOf(graph, id);
+    masses[index] = attributes.kind === "folder" ? HUB_MASS : Math.max(radii[index] ?? 0, MIN_MASS);
   });
-  return { ids, bodies: { xs, ys, radii } };
+  return { ids, bodies: { xs, ys, radii, masses } };
 }
 
 function writeBodies(graph: CodeGraph, placement: Placement): void {
@@ -107,7 +96,7 @@ class LayoutJob {
   constructor(graph: CodeGraph, options: LayoutOptions) {
     this.graph = graph;
     this.options = options;
-    this.placement = placementBodies(graph, options.viewportPx);
+    this.placement = placementBodies(graph);
     const { ids, bodies } = this.placement;
     this.model = buildRelaxModel(graph, ids, bodies.xs, bodies.ys);
     this.separator = createSeparator(bodies, 0);

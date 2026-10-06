@@ -1,6 +1,7 @@
 import { clamp } from "@/shared/lib/clamp";
 
 import { clamp01 } from "./color-math";
+import { SEED_SPACING } from "./layout-params";
 
 const SMALL_PROJECT_FILES = 24;
 const LARGE_PROJECT_FILES = 2400;
@@ -45,6 +46,18 @@ export function sizeScale(fileCount: number, maxImportance: number): SizeScale {
 export function fileSize(importance: number, scale: SizeScale): number {
   const t = clamp01(Math.log1p(Math.max(importance, 0)) / Math.log1p(scale.reference));
   return scale.min + (scale.max - scale.min) * Math.pow(t, SIZE_CURVE);
+}
+
+const FIT_GAP_PX = 1.2;
+const MIN_FIT_FACTOR = 0.4;
+
+/**
+ * How much to shrink files so that neighbours do not touch: `pxPerUnit` is the fitted view's pixels per layout unit,
+ * so a dense project in a small panel gets smaller nodes while a sparse one keeps its full size.
+ */
+export function fitSizeFactor(pxPerUnit: number, scale: SizeScale): number {
+  const room = (pxPerUnit * SEED_SPACING) / 2 - FIT_GAP_PX / 2;
+  return clamp(room / scale.min, MIN_FIT_FACTOR, 1);
 }
 
 export function hubSize(fileCount: number): number {

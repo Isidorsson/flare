@@ -11,17 +11,15 @@ import type { GraphStore } from "./graph-store";
 import { createMeasurer, drawPill, drawSpark, pillSize, type LabelPart, type Measure } from "./label-draw";
 import {
   placeLabels,
-  rectsOverlap,
   SIDES_FOR_FILES,
   SIDES_FOR_HUBS,
   type LabelRequest,
   type Obstacle,
   type PlacedLabel,
-  type Rect,
   type Size,
 } from "./label-place";
 import { fileLabelBudget, planLabels, type LabelTone, type PlannedLabel } from "./label-select";
-import { activityBadge, hubLabel, truncateLabel } from "./label-text";
+import { activityBadge, hubLabel, truncateLabel, type FolderActivity } from "./label-text";
 import type { Palette } from "./palette";
 import type { Point } from "./placement";
 
@@ -29,7 +27,6 @@ const TOUCH_LABEL_WINDOW_MS = 180_000;
 const OFFSCREEN_MARGIN = 40;
 const SPARK_MIN_RADIUS = 5;
 const SPARK_RADIUS_FACTOR = 1.5;
-const BADGE_GAP = 4;
 const PILL_ALPHA = 0.84;
 const REQUIRED_TONES: ReadonlySet<LabelTone> = new Set(["focus", "selected", "hot", "blast"]);
 
@@ -76,6 +73,7 @@ export class LabelLayer {
   private ranked: readonly string[] = [];
   private hubIds: readonly string[] = [];
   private focus: Focus | null = null;
+  private totals: ReadonlyMap<string, FolderActivity> = new Map();
 
   constructor(deps: LabelDeps) {
     this.deps = deps;
@@ -106,10 +104,10 @@ export class LabelLayer {
     this.measure ??= createMeasurer(pen, this.deps.palette.monoFamily);
     const measure = this.measure;
     this.drawSparks(pen, view);
+    this.totals = this.folderTotals();
     const resolved = this.planned(view).flatMap((planned) => this.resolve(planned, view));
     const placed = this.place(resolved, view, measure);
     this.drawLabels(pen, resolved, placed, measure);
-    this.drawBadges(pen, resolved, placed, measure);
   }
 
   private planned(view: Size): PlannedLabel[] {
@@ -124,6 +122,7 @@ export class LabelLayer {
       blast: state.blast,
       touched: recentlyTouched(state.activity.nodes, this.deps.now(), TOUCH_LABEL_WINDOW_MS),
       budget: fileLabelBudget(this.index?.tree.size ?? 0, view, ratio),
+      workedHubs: new Set(this.totals.keys()),
     });
   }
 
@@ -143,15 +142,28 @@ export class LabelLayer {
     const attrs = graph.getNodeAttributes(planned.id);
     const radius = sigma.scaleSize(display.size);
     const isHub = attrs.kind === "folder";
-    const parts = isHub ? this.hubParts(attrs) : [this.filePart(planned, attrs.label)];
+    const parts = isHub ? this.hubParts(planned.id, attrs) : [this.filePart(planned, attrs.label)];
     return [{ planned, anchor, radius, parts, kind: isHub ? "hub" : "file" }];
   }
 
-  private hubParts(attrs: NodeAttrs): LabelPart[] {
-    const { palette } = this.deps;
-    const label = hubLabel(attrs.label, attrs.files, attrs.folder === "");
+  /** What the agent has done inside each hub, keyed by the hub's node id. */
+  private folderTotals(): Map<string, FolderActivity> {
+    const { graph, store } = this.deps;
+    const owner = (id: string) => (graph.hasNode(id) ? folderId(graph.getNodeAttribute(id, "hub")) : null);
+    return folderActivity(store.getState().activity.nodes, owner);
+  }
+
+  private hubParts(id: string, attrs: NodeAttrs): LabelPart[] {
+    const { palette, colors } = this.deps;
+    const name = this.index?.hubNames.get(attrs.folder) ?? attrs.label;
+    const label = hubLabel(name, attrs.files, attrs.folder === "");
     const parts: LabelPart[] = [{ text: label.name, color: palette.label, weight: 600 }];
     if (label.count !== "") parts.push({ text: label.count, color: palette.labelDim, weight: 500 });
+    const totals = this.totals.get(id);
+    const badge = totals === undefined ? null : activityBadge(totals);
+    if (totals !== undefined && badge !== null) {
+      parts.push({ text: badge, color: totals.edited > 0 ? colors.edit : colors.read, weight: 600 });
+    }
     return parts;
   }
 
@@ -202,10 +214,11 @@ export class LabelLayer {
       if (item === undefined) continue;
       const activity = store.getState().activity.nodes.get(label.id);
       const hot = item.planned.tone === "hot" && activity !== undefined;
-      const accent = hot ? activityColor(colors, activity.lastKind) : palette.label;
+      const worked = this.totals.has(label.id);
+      const accent = hot ? activityColor(colors, activity.lastKind) : worked ? colors.edit : palette.label;
       drawPill(pen, label.rect, item.parts, {
         background: withAlpha(palette.panel, PILL_ALPHA),
-        border: withAlpha(accent, hot ? 0.5 : 0.2),
+        border: withAlpha(accent, hot || worked ? 0.5 : 0.2),
         family: palette.monoFamily,
         measure,
       });
@@ -221,32 +234,6 @@ export class LabelLayer {
       const radius = Math.max(SPARK_MIN_RADIUS, sigma.scaleSize(display.size) * SPARK_RADIUS_FACTOR);
       const intensity = nodeBrightness(now() - activity.lastTouchedAt, false);
       drawSpark(pen, { center: anchor, radius, color: activityColor(colors, activity.lastKind), intensity });
-    }
-  }
-
-  private drawBadges(pen: Pen, resolved: readonly Resolved[], placed: readonly PlacedLabel[], measure: Measure): void {
-    const { palette, colors, store, graph } = this.deps;
-    const owner = (id: string) => (graph.hasNode(id) ? folderId(graph.getNodeAttribute(id, "hub")) : null);
-    const activity = folderActivity(store.getState().activity.nodes, owner);
-    const taken: Rect[] = placed.map((label) => label.rect);
-    for (const item of resolved) {
-      const counts = item.kind === "hub" ? activity.get(item.planned.id) : undefined;
-      const text = counts === undefined ? null : activityBadge(counts);
-      if (counts === undefined || text === null) continue;
-      const color = counts.edited > 0 ? colors.edit : colors.read;
-      const parts: LabelPart[] = [{ text, color, weight: 500 }];
-      const size = pillSize(parts, measure);
-      const label = placed.find((entry) => entry.id === item.planned.id);
-      const top = label?.side === "bottom" ? label.rect.y + label.rect.height + 2 : item.anchor.y + item.radius + BADGE_GAP;
-      const rect: Rect = { x: item.anchor.x - size.width / 2, y: top, ...size };
-      if (taken.some((other) => rectsOverlap(rect, other))) continue;
-      taken.push(rect);
-      drawPill(pen, rect, parts, {
-        background: withAlpha(palette.panel, 0.9),
-        border: withAlpha(color, 0.55),
-        family: palette.monoFamily,
-        measure,
-      });
     }
   }
 }

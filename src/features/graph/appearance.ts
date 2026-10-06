@@ -34,6 +34,10 @@ export interface AppearanceContext {
   readonly focus: Focus | null;
   readonly selected: string | null;
   readonly scale: SizeScale;
+  /** Shrinks files in a crowded view; see fitSizeFactor. */
+  readonly sizeFactor: number;
+  /** The widest extent of the layout in layout units, to judge how long an edge is. */
+  readonly layoutSpan: number;
   /** Alpha for a resting import edge; thinner for dense graphs. */
   readonly edgeAlpha: number;
   /** Whether import edges carry arrowheads; they only help while the graph is small. */
@@ -141,7 +145,7 @@ function fileStyle(info: NodeInfo, ctx: AppearanceContext): NodeStyle {
   const dimmed = role.kind === "inactive" && !hot && isOutOfFocus(info.id, ctx.focus);
   const recede = mixColors(baseColor(info, role, ctx), ctx.palette.background, dust ? DUST_MIX : RECEDE_MIX);
   const color = tintedColor(recede, role, activity, ctx);
-  const base = dust ? DUST_SIZE : info.size;
+  const base = dust ? DUST_SIZE : info.size * ctx.sizeFactor;
   return {
     color: dimmed ? mixColors(color, ctx.palette.background, FOCUS_DIM_MIX) : color,
     size: activity === undefined ? base : grownSize(base, activity, growthCeiling(ctx.scale)),

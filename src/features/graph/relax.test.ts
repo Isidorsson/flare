@@ -49,14 +49,16 @@ describe("relaxPull", () => {
     expect(after).toBeLessThan(before);
   });
 
-  test("leaves files without imports where they are", () => {
+  test("draws files without imports gently towards their folder hub", () => {
     const { model, ids, xs, ys } = modelFor(
       snapshot(["a/one.ts", "a/two.ts", "a/three.ts", "b/far.ts"], [["a/one.ts", "a/two.ts"]]),
       POSITIONS,
     );
     relaxPull(model, 0.5);
-    expect(at(ids, xs, ys, "a/three.ts")).toEqual({ x: 0, y: 30 });
-    expect(at(ids, xs, ys, "b/far.ts")).toEqual({ x: 190, y: 0 });
+    expect(at(ids, xs, ys, "a/three.ts").y).toBeLessThan(30);
+    expect(at(ids, xs, ys, "a/three.ts").y).toBeGreaterThan(0);
+    expect(at(ids, xs, ys, "b/far.ts").x).toBeGreaterThan(190);
+    expect(at(ids, xs, ys, "b/far.ts").x).toBeLessThan(200);
   });
 
   test("never lets a file leave the reach of its folder", () => {
@@ -82,10 +84,10 @@ describe("relaxPull", () => {
     expect(at(ids, xs, ys, "a/one.ts").x).toBeGreaterThan(before);
   });
 
-  test("treats a graph without imports as already relaxed", () => {
+  test("settles a folder around its hub when nothing is imported", () => {
     const { model, ids, xs, ys } = modelFor(snapshot(["a/one.ts", "a/two.ts"], []), POSITIONS);
-    const before = at(ids, xs, ys, "a/one.ts");
-    relaxPull(model, 0.5);
-    expect(at(ids, xs, ys, "a/one.ts")).toEqual(before);
+    for (let round = 0; round < 60; round += 1) relaxPull(model, 0.5);
+    const hub = at(ids, xs, ys, folderId("a"));
+    expect(Math.hypot(at(ids, xs, ys, "a/one.ts").x - hub.x, at(ids, xs, ys, "a/one.ts").y - hub.y)).toBeLessThan(1);
   });
 });

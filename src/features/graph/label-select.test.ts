@@ -21,6 +21,7 @@ function input(overrides: Partial<LabelPlanInput> = {}): LabelPlanInput {
     blast: null,
     touched: new Map(),
     budget: 2,
+    workedHubs: new Set(),
     ...overrides,
   };
 }
@@ -94,6 +95,11 @@ describe("planLabels", () => {
     expect(plan[0]).toMatchObject({ id: "o.ts", tone: "blast" });
     expect(plan.filter((label) => label.tone === "blast")).toHaveLength(BLAST_LABEL_LIMIT + 1);
     expect(plan.some((label) => label.id === "far.ts")).toBe(false);
+  });
+
+  test("labels hubs the agent worked in ahead of quiet ones", () => {
+    const ids = planLabels(input({ level: "overview", workedHubs: new Set(["hub:lib"]) })).map((label) => label.id);
+    expect(ids).toEqual(["hub:lib", "hub:src"]);
   });
 
   test("lists a node once, under its strongest reason", () => {

@@ -46,6 +46,8 @@ function context(overrides: Partial<AppearanceContext> = {}): AppearanceContext 
     focus: null,
     selected: null,
     scale,
+    sizeFactor: 1,
+    layoutSpan: 100,
     edgeAlpha: 0.3,
     arrows: true,
     ...overrides,
@@ -108,6 +110,12 @@ describe("colour", () => {
 });
 
 describe("size", () => {
+  test("files shrink in a crowded view but dust and activity growth do not", () => {
+    const crowded = context({ sizeFactor: 0.5 });
+    expect(nodeStyle(node("src/a.ts", { size: 8 }), crowded).size).toBe(4);
+    expect(nodeStyle(node("src/a.ts", { size: 8 }), context({ level: "overview", sizeFactor: 0.5 })).size).toBe(DUST_SIZE);
+  });
+
   test("files keep their importance-based size at the files level", () => {
     expect(nodeStyle(node("src/a.ts", { size: 7 }), context()).size).toBe(7);
   });

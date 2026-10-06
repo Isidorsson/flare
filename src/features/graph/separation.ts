@@ -2,6 +2,8 @@ export interface Bodies {
   readonly xs: Float64Array;
   readonly ys: Float64Array;
   readonly radii: Float64Array;
+  /** How hard a body is to move; the heavier of two touching bodies gives way less. Defaults to the radius. */
+  readonly masses?: Float64Array;
 }
 
 export interface Separator {
@@ -58,14 +60,13 @@ function direction(bodies: Bodies, first: number, second: number): { dx: number;
 
 function pushApart(bodies: Bodies, first: number, second: number, gap: number): number {
   const { xs, ys, radii } = bodies;
-  const ri = at(radii, first);
-  const rj = at(radii, second);
   const { dx, dy, distance } = direction(bodies, first, second);
-  const overlap = ri + rj + gap - distance;
+  const overlap = at(radii, first) + at(radii, second) + gap - distance;
   if (overlap <= 0) return 0;
   const length = distance > 0 ? distance : 1;
   const push = overlap * DAMPING;
-  const shareFirst = rj / (ri + rj);
+  const masses = bodies.masses ?? radii;
+  const shareFirst = at(masses, second) / (at(masses, first) + at(masses, second));
   xs[first] = at(xs, first) - (dx / length) * push * shareFirst;
   ys[first] = at(ys, first) - (dy / length) * push * shareFirst;
   xs[second] = at(xs, second) + (dx / length) * push * (1 - shareFirst);

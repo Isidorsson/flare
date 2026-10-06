@@ -17,7 +17,7 @@ const MIN_LABEL_BUDGET = 6;
 const MAX_LABEL_BUDGET = 90;
 const SMALL_GRAPH_FILES = 40;
 
-const PRIORITY = { focus: 1000, selected: 950, blastOrigin: 900, hot: 800, blast: 700, neighbour: 600, hub: 500, file: 300 } as const;
+const PRIORITY = { focus: 1000, selected: 950, blastOrigin: 900, hot: 800, blast: 700, neighbour: 600, hub: 500, workedHubBoost: 120, file: 300 } as const;
 
 export interface LabelPlanInput {
   readonly level: GraphLevel;
@@ -31,6 +31,8 @@ export interface LabelPlanInput {
   /** Touched files with when they were last touched. */
   readonly touched: ReadonlyMap<string, number>;
   readonly budget: number;
+  /** Hubs the agent has worked in; they are labelled ahead of quiet ones so their activity shows. */
+  readonly workedHubs: ReadonlySet<string>;
 }
 
 /** How many ordinary file labels fit: roughly one per block of screen, more as the view zooms in. */
@@ -84,7 +86,7 @@ export function planLabels(input: LabelPlanInput): PlannedLabel[] {
   planBlast(plan, input.blast);
   planTouched(plan, input.touched);
   input.hubs.forEach((id, index) => {
-    addOnce(plan, id, "hub", PRIORITY.hub - index * 0.01);
+    addOnce(plan, id, "hub", PRIORITY.hub + (input.workedHubs.has(id) ? PRIORITY.workedHubBoost : 0) - index * 0.01);
   });
   if (input.level === "files") {
     input.ranked.slice(0, input.budget).forEach((id, index) => {

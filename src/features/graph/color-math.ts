@@ -40,6 +40,16 @@ export function withAlpha(color: string, alpha: number): string {
   return `rgba(${r}, ${g}, ${b}, ${clamp01(alpha).toFixed(3)})`;
 }
 
+/**
+ * Sigma blends with premultiplied alpha but reads colours as plain rgba, so a translucent colour handed to it must have its
+ * channels scaled by the alpha already, or it paints at full brightness whatever the alpha says.
+ */
+export function withPremultipliedAlpha(color: string, alpha: number): string {
+  const { r, g, b } = parseHex(color);
+  const a = clamp01(alpha);
+  return `rgba(${Math.round(r * a)}, ${Math.round(g * a)}, ${Math.round(b * a)}, ${a.toFixed(3)})`;
+}
+
 export interface Hsl {
   h: number;
   s: number;

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { DUST_SIZE, fileSize, growthCeiling, hubSize, importanceOf, sizeScale } from "./node-scale";
+import { DUST_SIZE, fitSizeFactor, fileSize, growthCeiling, hubSize, importanceOf, sizeScale } from "./node-scale";
 
 describe("importance", () => {
   test("weighs dependents above dependencies", () => {
@@ -43,6 +43,23 @@ describe("size scale", () => {
   test("copes with a graph that has no edges", () => {
     const scale = sizeScale(10, 0);
     expect(fileSize(0, scale)).toBeCloseTo(scale.min);
+  });
+});
+
+describe("fitSizeFactor", () => {
+  test("leaves files alone when there is plenty of room", () => {
+    expect(fitSizeFactor(10, sizeScale(100, 10))).toBe(1);
+  });
+
+  test("shrinks files as the fitted view gets more crowded", () => {
+    const scale = sizeScale(2000, 10);
+    expect(fitSizeFactor(1, scale)).toBeLessThan(fitSizeFactor(2, scale));
+    expect(fitSizeFactor(0.6, scale)).toBeLessThan(1);
+  });
+
+  test("never shrinks files out of sight", () => {
+    expect(fitSizeFactor(0.0001, sizeScale(2000, 10))).toBe(0.4);
+    expect(fitSizeFactor(-3, sizeScale(2000, 10))).toBe(0.4);
   });
 });
 

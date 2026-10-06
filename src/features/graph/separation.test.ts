@@ -46,6 +46,19 @@ describe("separator", () => {
     expect(Math.abs(input.xs[0] ?? 0)).toBeLessThan(Math.abs((input.xs[1] ?? 0) - 5));
   });
 
+  test("lets a heavy body hold its ground while a light one is pushed away", () => {
+    const input = {
+      ...bodies([
+        [0, 0, 5],
+        [3, 0, 5],
+      ]),
+      masses: Float64Array.from([1e6, 1]),
+    };
+    createSeparator(input, 0).step(50);
+    expect(Math.abs(input.xs[0] ?? 1)).toBeLessThan(0.01);
+    expect((input.xs[1] ?? 0) - (input.xs[0] ?? 0)).toBeGreaterThanOrEqual(9.9);
+  });
+
   test("untangles a dense cluster", () => {
     const points: [number, number, number][] = Array.from({ length: 120 }, (_, index) => [
       Math.cos(index) * (index % 7),

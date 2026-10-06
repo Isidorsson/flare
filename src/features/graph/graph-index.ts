@@ -25,6 +25,8 @@ export interface GraphIndex {
   readonly roleCounts: RoleCounts;
   readonly rootLabel: string;
   /** For each file, the files that import it directly. */
+  /** What each hub is called on screen: its folder name, with a parent added where two hubs would read the same. */
+  readonly hubNames: ReadonlyMap<string, string>;
   readonly importers: ReadonlyMap<string, readonly string[]>;
   /** For each file, the files it imports directly. */
   readonly imports: ReadonlyMap<string, readonly string[]>;
@@ -60,6 +62,18 @@ function adjacency(snapshot: GraphSnapshot): { importers: Map<string, string[]>;
   return { importers, imports };
 }
 
+function hubNameMap(hubs: ReadonlySet<string>, rootLabel: string): Map<string, string> {
+  const lastSegments = (path: string, count: number) => path.split("/").slice(-count).join("/");
+  const counts = new Map<string, number>();
+  for (const hub of hubs) counts.set(lastSegments(hub, 1), (counts.get(lastSegments(hub, 1)) ?? 0) + 1);
+  const names = new Map<string, string>();
+  for (const hub of hubs) {
+    const clash = (counts.get(lastSegments(hub, 1)) ?? 0) > 1;
+    names.set(hub, hub === "" ? rootLabel : lastSegments(hub, clash ? 2 : 1));
+  }
+  return names;
+}
+
 function folderRoleMap(tree: DirNode, roles: ReadonlyMap<string, Role>): Map<string, Role> {
   const result = new Map<string, Role>();
   forEachDir(tree, (dir) => {
@@ -80,16 +94,19 @@ export function buildGraphIndex(snapshot: GraphSnapshot): GraphIndex {
   });
   const maxImportance = Math.max(0, ...importance.values());
   const { importers, imports } = adjacency(snapshot);
+  const hubs = selectHubFolders(tree);
+  const rootLabel = pathBaseName(snapshot.root);
   return {
     tree,
-    hubs: selectHubFolders(tree),
+    hubs,
     scale: sizeScale(ids.length, maxImportance),
     importance,
     roles,
     folderRoles: folderRoleMap(tree, roles),
     folders,
     roleCounts: countRoles(roles.values()),
-    rootLabel: pathBaseName(snapshot.root),
+    rootLabel,
+    hubNames: hubNameMap(hubs, rootLabel),
     importers,
     imports,
   };
@@ -108,19 +125,4 @@ export function graphIndexFor(snapshot: GraphSnapshot): GraphIndex {
 
 export function hubOfFile(index: GraphIndex, fileId: string): string {
   return owningHub(index.hubs, fileFolder(fileId));
-}
-
-/** Files that belong to a hub without belonging to a smaller hub beneath it. */
-export function hubOwnFiles(index: GraphIndex, hub: string): string[] {
-  const dir = index.folders.get(hub);
-  if (dir === undefined) return [];
-  const own: string[] = [];
-  const visit = (node: DirNode) => {
-    own.push(...node.files);
-    for (const child of node.dirs) {
-      if (!index.hubs.has(child.path)) visit(child);
-    }
-  };
-  visit(dir);
-  return own;
 }
