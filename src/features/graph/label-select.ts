@@ -59,7 +59,7 @@ function planBlast(plan: Map<string, PlannedLabel>, blast: BlastState | null): v
   if (blast === null) return;
   addOnce(plan, blast.origin, "blast", PRIORITY.blastOrigin);
   let shown = 0;
-  for (const [id, depth] of blast.depths ?? []) {
+  for (const [id, depth] of blast.depths) {
     if (depth !== 1) continue;
     addOnce(plan, id, "blast", PRIORITY.blast - shown * 0.01);
     shown += 1;

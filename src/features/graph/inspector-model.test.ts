@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import type { NodeActivity } from "./activity-state";
 import { buildGraphIndex, graphIndexFor } from "./graph-index";
-import { formatAgo, inspectFile, LIST_LIMIT, transitiveDependents } from "./inspector-model";
+import { formatAgo, inspectFile, LIST_LIMIT } from "./inspector-model";
 import type { GraphSnapshot } from "./graph-types";
 
 const FILES = [
@@ -40,27 +40,6 @@ describe("formatAgo", () => {
     expect(formatAgo(42_000)).toBe("42s ago");
     expect(formatAgo(5 * 60_000 + 10)).toBe("5m ago");
     expect(formatAgo(3 * 3_600_000)).toBe("3h ago");
-  });
-});
-
-describe("transitiveDependents", () => {
-  test("follows imports backwards, nearest first, without repeats", () => {
-    const dependents = transitiveDependents(index, "src/lib/money.ts");
-    expect(dependents[0]).toBe("src/lib/cart.ts");
-    expect(new Set(dependents).size).toBe(dependents.length);
-    expect(dependents).toContain("src/components/Page.tsx");
-    expect(dependents).not.toContain("src/lib/money.ts");
-  });
-
-  test("terminates on import cycles", () => {
-    const cyclic: GraphSnapshot = {
-      ...SNAPSHOT,
-      edges: [
-        { source: "src/lib/cart.ts", target: "src/lib/money.ts" },
-        { source: "src/lib/money.ts", target: "src/lib/cart.ts" },
-      ],
-    };
-    expect(transitiveDependents(buildGraphIndex(cyclic), "src/lib/cart.ts")).toEqual(["src/lib/money.ts"]);
   });
 });
 

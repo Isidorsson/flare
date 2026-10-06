@@ -16,19 +16,23 @@ import {
   INITIAL_CAMERA,
   type CameraPrefs,
 } from "./camera-state";
+import { blastDepths } from "./blast-radius";
 import type { GraphApi } from "./graph-api";
+import { graphIndexFor } from "./graph-index";
 import { createNodeResolver, resolveGraphNode, type NodeResolver } from "./graph-paths";
-import type { BlastRadius, GraphSnapshot } from "./graph-types";
+import type { GraphSnapshot } from "./graph-types";
 import type { Point } from "./placement";
 
 export type GraphStatus = "idle" | "loading" | "ready" | "error";
-export type GraphMode = "explore" | "blast";
+/** What a selected file lights up: its direct imports and importers, or everything that depends on it by distance. */
+export type GraphReach = "direct" | "blast";
 export type ColorBy = "role" | "language" | "directory";
 export type GraphLevel = "overview" | "files";
 
+/** Follows the selection while the reach is "blast"; it is never set on its own. */
 export interface BlastState {
   readonly origin: string;
-  readonly depths: ReadonlyMap<string, number> | null;
+  readonly depths: ReadonlyMap<string, number>;
 }
 
 export interface GraphData {
@@ -39,7 +43,7 @@ export interface GraphData {
   resolver: NodeResolver | null;
   activity: ActivityState;
   camera: CameraPrefs;
-  mode: GraphMode;
+  reach: GraphReach;
   colorBy: ColorBy;
   level: GraphLevel;
   selected: string | null;
@@ -57,11 +61,10 @@ export interface GraphActions {
   moveCameraByUser: () => void;
   fitCamera: () => void;
   toggleFollow: () => void;
-  setMode: (mode: GraphMode) => void;
+  setReach: (reach: GraphReach) => void;
   setColorBy: (colorBy: ColorBy) => void;
   setLevel: (level: GraphLevel) => void;
   select: (id: string | null) => void;
-  inspectBlast: (path: string) => Promise<void>;
   savePositions: (positions: ReadonlyMap<string, Point>) => void;
   reportFailure: (error: unknown) => void;
 }
@@ -87,7 +90,6 @@ interface Context extends GraphDeps {
   set: GraphStore["setState"];
   get: GraphStore["getState"];
   builds: Counter;
-  blasts: Counter;
   refresh: RefreshState;
 }
 
@@ -100,7 +102,7 @@ function initialData(): GraphData {
     resolver: null,
     activity: initialActivity(),
     camera: INITIAL_CAMERA,
-    mode: "explore",
+    reach: "direct",
     colorBy: "role",
     level: "overview",
     selected: null,
@@ -124,21 +126,26 @@ function snapshotPatch(snapshot: GraphSnapshot, selected: string | null): Partia
   };
 }
 
-function toDepthMap(radius: BlastRadius): ReadonlyMap<string, number> {
-  return new Map(radius.nodes.map((node) => [node.id, node.depth]));
+function blastOf({ snapshot, reach, selected }: Pick<GraphData, "snapshot" | "reach" | "selected">): BlastState | null {
+  if (reach !== "blast" || selected === null || snapshot === null) return null;
+  return { origin: selected, depths: blastDepths(graphIndexFor(snapshot), selected) };
+}
+
+/** Every change to the snapshot, the selection or the reach goes through here, so the blast radius cannot drift from them. */
+function patchView(context: Context, patch: Partial<GraphData>): void {
+  context.set({ ...patch, blast: blastOf({ ...context.get(), ...patch }) });
 }
 
 async function runBuild(context: Context, root: string, keepView: boolean): Promise<void> {
   context.builds.current += 1;
   const token = context.builds.current;
-  const { mode, colorBy, level } = context.get();
-  const reset = keepView ? {} : { ...initialData(), mode, colorBy, level };
+  const { reach, colorBy, level } = context.get();
+  const reset = keepView ? {} : { ...initialData(), reach, colorBy, level };
   context.set({ ...reset, root, status: "loading", error: null });
   try {
     const snapshot = await context.api.build(root);
     if (token !== context.builds.current) return;
-    context.set(snapshotPatch(snapshot, context.get().selected));
-    await refreshBlast(context);
+    patchView(context, snapshotPatch(snapshot, context.get().selected));
   } catch (error) {
     if (token === context.builds.current) {
       context.set({ status: "error", error: describeError(error) });
@@ -172,39 +179,11 @@ async function refreshOnce(context: Context): Promise<void> {
   try {
     const snapshot = await context.api.snapshot();
     if (token !== context.builds.current) return;
-    context.set(snapshotPatch(snapshot, context.get().selected));
-    await refreshBlast(context);
+    patchView(context, snapshotPatch(snapshot, context.get().selected));
   } catch (error) {
     if (token === context.builds.current) {
       context.set({ error: describeError(error) });
     }
-  }
-}
-
-async function refreshBlast(context: Context): Promise<void> {
-  const { blast, resolver } = context.get();
-  if (blast === null) return;
-  const stillIndexed = resolver !== null && resolver.resolve(blast.origin) !== null;
-  if (!stillIndexed) {
-    context.set({ blast: null });
-    return;
-  }
-  await runBlast(context, blast.origin);
-}
-
-async function runBlast(context: Context, path: string): Promise<void> {
-  context.blasts.current += 1;
-  const token = context.blasts.current;
-  const previous = context.get().blast;
-  const depths = previous?.origin === path ? previous.depths : null;
-  context.set({ blast: { origin: path, depths } });
-  try {
-    const radius = await context.api.blastRadius(path);
-    if (token !== context.blasts.current) return;
-    context.set({ blast: { origin: radius.origin, depths: toDepthMap(radius) }, error: null });
-  } catch (error) {
-    if (token !== context.blasts.current) return;
-    context.set({ blast: null, error: describeError(error) });
   }
 }
 
@@ -214,9 +193,12 @@ function recordActivity(context: Context, input: ActivityInput): void {
   context.set({ activity: recordTouch(activity, touch, context.now()) });
 }
 
-function switchMode(context: Context, mode: GraphMode): void {
-  if (mode === "explore") context.blasts.current += 1;
-  context.set({ mode, blast: mode === "explore" ? null : context.get().blast });
+function selectFile(context: Context, id: string | null): void {
+  if (context.get().selected !== id) patchView(context, { selected: id });
+}
+
+function switchReach(context: Context, reach: GraphReach): void {
+  if (context.get().reach !== reach) patchView(context, { reach });
 }
 
 function reindexCurrentRoot(context: Context): Promise<void> {
@@ -237,7 +219,6 @@ export function createGraphStore(deps: GraphDeps): GraphStore {
       set,
       get,
       builds: { current: 0 },
-      blasts: { current: 0 },
       refresh: { running: false, queued: false },
     };
     return {
@@ -265,8 +246,8 @@ export function createGraphStore(deps: GraphDeps): GraphStore {
       toggleFollow: () => {
         set({ camera: cameraAfterFollowToggle(get().camera) });
       },
-      setMode: (mode) => {
-        switchMode(context, mode);
+      setReach: (reach) => {
+        switchReach(context, reach);
       },
       setColorBy: (colorBy) => {
         set({ colorBy });
@@ -275,9 +256,8 @@ export function createGraphStore(deps: GraphDeps): GraphStore {
         set({ level });
       },
       select: (id) => {
-        set({ selected: id });
+        selectFile(context, id);
       },
-      inspectBlast: (path) => runBlast(context, path),
       savePositions: (positions) => {
         set({ positions });
       },

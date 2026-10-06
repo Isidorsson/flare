@@ -8,6 +8,8 @@ interface IconButtonProps extends Omit<ComponentProps<"button">, "children" | "a
   /** Names the button for assistive tech and for the tooltip: say what pressing it does. */
   label: string;
   shortcut?: string | undefined;
+  /** A second, muted tooltip line for what the label cannot say, such as what a toggle currently does. */
+  detail?: string | undefined;
   /** Set while the button cannot be used. It stays hoverable and focusable so the tooltip can say why. */
   disabledReason?: string | undefined;
   side?: TooltipSide | undefined;
@@ -25,6 +27,7 @@ export function IconButton({
   icon: Icon,
   label,
   shortcut,
+  detail,
   disabledReason,
   side,
   className = "",
@@ -33,7 +36,7 @@ export function IconButton({
 }: IconButtonProps) {
   const disabled = disabledReason !== undefined;
   return (
-    <Tooltip content={label} detail={disabledReason} shortcut={disabled ? undefined : shortcut} side={side}>
+    <Tooltip content={label} detail={disabledReason ?? detail} shortcut={disabled ? undefined : shortcut} side={side}>
       <button
         type="button"
         aria-label={label}

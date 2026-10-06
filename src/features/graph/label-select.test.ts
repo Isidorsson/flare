@@ -106,8 +106,4 @@ describe("planLabels", () => {
     const plan = planLabels(input({ focus: { node: "a.ts", neighbours: new Set() }, touched: new Map([["a.ts", 1]]) }));
     expect(plan.filter((label) => label.id === "a.ts")).toEqual([{ id: "a.ts", tone: "focus", priority: 1000 }]);
   });
-
-  test("tolerates a blast whose dependents are still loading", () => {
-    expect(() => planLabels(input({ blast: { origin: "o.ts", depths: null } }))).not.toThrow();
-  });
 });

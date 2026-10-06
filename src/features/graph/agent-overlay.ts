@@ -209,15 +209,15 @@ export class AgentOverlay {
     context.restore();
   }
 
-  /** The selected file, ringed, with arcs to the files that import it (purple) and the files it imports (blue). */
+  /** The selected file, ringed. In the direct reach it also gets arcs to the files that import it (purple) and the files it imports (blue). */
   private drawSelection(context: Pen, now: number, reducedMotion: boolean): void {
     const { graph, store, palette } = this.deps;
     const state = store.getState();
-    const origin = state.blast?.origin ?? state.selected;
+    const origin = state.selected;
     if (origin === null || !graph.hasNode(origin)) return;
     const centre = this.nodeViewport(origin);
     const dashOffset = reducedMotion ? 0 : -now * ARC_FLOW_PX_PER_MS;
-    const { importers, imports } = arcTargets(graph, origin);
+    const { importers, imports } = state.reach === "direct" ? arcTargets(graph, origin) : { importers: [], imports: [] };
     const arc = (from: Point, to: Point, color: string, index: number) => {
       drawArc(context, { from, to, control: arcControl(from, to, index), color, dashOffset });
     };

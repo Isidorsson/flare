@@ -37,7 +37,6 @@ function makeStore(): GraphStore {
   const api: GraphApi = {
     build: () => Promise.resolve(snapshot),
     snapshot: () => Promise.resolve(snapshot),
-    blastRadius: (path) => Promise.resolve({ origin: path, nodes: [] }),
     updateFile: () => Promise.resolve("unchanged"),
     removeFile: () => Promise.resolve("unchanged"),
   };
@@ -277,11 +276,20 @@ describe("drawing", () => {
     expect(String(arc?.color)).toBe(withAlpha(fixturePalette().imports, 0.72));
   });
 
-  test("a blast origin takes the place of the selection", () => {
-    h.store.getState().select("src/c.ts");
-    h.store.setState({ blast: { origin: "src/b.ts", depths: null } });
+  test("in the blast reach the selection keeps its ring but loses the neighbour arcs", () => {
+    h.store.getState().setReach("blast");
+    h.store.getState().select("src/b.ts");
     h.overlay.draw(false);
-    expect(h.agent.arcs.some((arc) => Math.hypot(arc.x - 300, arc.y - 100) < 20)).toBe(true);
+    expect(h.agent.strokes.filter((stroke) => stroke.dashed)).toHaveLength(1);
+    expect(h.agent.arcs.some((arc) => arc.x === 300 && arc.y === 100 && arc.radius === 4 + 5)).toBe(true);
+  });
+
+  test("switching the reach back restores the neighbour arcs around the same selection", () => {
+    h.store.getState().select("src/b.ts");
+    h.store.getState().setReach("blast");
+    h.store.getState().setReach("direct");
+    h.overlay.draw(false);
+    expect(h.agent.strokes.filter((stroke) => stroke.dashed)).toHaveLength(2);
   });
 
   test("selection arcs hold still under reduced motion", () => {

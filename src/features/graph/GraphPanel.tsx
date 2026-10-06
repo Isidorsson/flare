@@ -24,10 +24,7 @@ function GraphView({ root, onOpenFile }: GraphViewProps) {
   const hasNodes = useGraph((state) => (state.snapshot?.nodes.length ?? 0) > 0);
 
   function handleNodeClick(id: string) {
-    if (isFolderId(id)) return;
-    const state = graphStore.getState();
-    state.select(id);
-    if (state.mode === "blast") void state.inspectBlast(id);
+    if (!isFolderId(id)) graphStore.getState().select(id);
   }
 
   function openFile(id: string) {

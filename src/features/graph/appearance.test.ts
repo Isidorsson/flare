@@ -177,11 +177,6 @@ describe("blast radius highlighting", () => {
     expect(outside.zIndex).toBeLessThanOrEqual(inside.zIndex);
   });
 
-  test("keeps normal colours while the radius is still being computed", () => {
-    const loading = context({ blast: { origin: "src/leaf.ts", depths: null } });
-    expect(nodeStyle(node("src/unrelated.ts"), loading).color).toBe(resting(palette.language.typescript));
-  });
-
   test("shows the files in a blast even in the overview", () => {
     const style = nodeStyle(node("src/mid.ts", { size: 7 }), context({ blast, level: "overview" }));
     expect(style.size).toBe(7);

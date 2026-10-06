@@ -2,8 +2,10 @@ import { beforeEach, describe, expect, test } from "bun:test";
 
 import { blastRole } from "./appearance";
 import type { GraphApi } from "./graph-api";
+import { graphIndexFor } from "./graph-index";
 import { createGraphStore, type GraphStore } from "./graph-store";
-import type { BlastRadius, GraphSnapshot } from "./graph-types";
+import type { GraphSnapshot } from "./graph-types";
+import { inspectFile } from "./inspector-model";
 
 const ROOT = "C:\\Users\\me\\app";
 
@@ -37,14 +39,12 @@ interface Harness {
   store: GraphStore;
   api: GraphApi;
   buildCalls: string[];
-  blastCalls: string[];
   clock: { now: number };
   withApi: (overrides: Partial<GraphApi>) => GraphStore;
 }
 
 function harness(): Harness {
   const buildCalls: string[] = [];
-  const blastCalls: string[] = [];
   const defaultSnapshot = makeSnapshot(["src/a.ts", "src/b.ts", "src/c.ts"], [["src/a.ts", "src/b.ts"]]);
   const api: GraphApi = {
     build: (root) => {
@@ -52,17 +52,13 @@ function harness(): Harness {
       return Promise.resolve(defaultSnapshot);
     },
     snapshot: () => Promise.resolve(defaultSnapshot),
-    blastRadius: (path) => {
-      blastCalls.push(path);
-      return Promise.resolve({ origin: path, nodes: [{ id: "src/a.ts", depth: 1 }] });
-    },
     updateFile: () => Promise.resolve("unchanged"),
     removeFile: () => Promise.resolve("unchanged"),
   };
   const clock = { now: 1000 };
   const withApi = (overrides: Partial<GraphApi>) =>
     createGraphStore({ api: { ...api, ...overrides }, now: () => clock.now });
-  return { store: withApi({}), api, buildCalls, blastCalls, clock, withApi };
+  return { store: withApi({}), api, buildCalls, clock, withApi };
 }
 
 let h: Harness;
@@ -317,68 +313,170 @@ describe("camera preferences", () => {
   });
 });
 
+const CHAIN = makeSnapshot(
+  ["src/a.ts", "src/b.ts", "src/c.ts", "src/d.ts"],
+  [
+    ["src/a.ts", "src/b.ts"],
+    ["src/b.ts", "src/c.ts"],
+  ],
+);
+
+function chainStore(): GraphStore {
+  return h.withApi({ build: () => Promise.resolve(CHAIN), snapshot: () => Promise.resolve(CHAIN) });
+}
+
+async function loadedChain(): Promise<GraphStore> {
+  const store = chainStore();
+  await store.getState().load(ROOT);
+  return store;
+}
+
+function depthsOf(store: GraphStore): [string, number][] {
+  return [...(store.getState().blast?.depths ?? [])];
+}
+
 describe("blast radius", () => {
-  test("stores dependents by depth for the chosen file", async () => {
-    await h.store.getState().load(ROOT);
-    await h.store.getState().inspectBlast("src/b.ts");
-    const blast = h.store.getState().blast;
-    expect(blast?.origin).toBe("src/b.ts");
-    expect(blast?.depths?.get("src/a.ts")).toBe(1);
-    expect(h.blastCalls).toEqual(["src/b.ts"]);
+  test("a file's reach is direct until the blast radius is switched on", async () => {
+    const store = await loadedChain();
+    store.getState().select("src/c.ts");
+    expect(store.getState().reach).toBe("direct");
+    expect(store.getState().blast).toBeNull();
   });
 
-  test("shows a pending selection while the radius is being computed", async () => {
-    const pending = deferred<BlastRadius>();
-    const store = h.withApi({ blastRadius: () => pending.promise });
-    await store.getState().load(ROOT);
-    const request = store.getState().inspectBlast("src/b.ts");
-    expect(store.getState().blast).toEqual({ origin: "src/b.ts", depths: null });
-    pending.resolve({ origin: "src/b.ts", nodes: [] });
-    await request;
-    expect(store.getState().blast?.depths?.size).toBe(0);
+  test("switching it on applies at once to the file that is already selected", async () => {
+    const store = await loadedChain();
+    store.getState().select("src/c.ts");
+    store.getState().setReach("blast");
+    expect(store.getState().blast?.origin).toBe("src/c.ts");
+    expect(depthsOf(store)).toEqual([
+      ["src/b.ts", 1],
+      ["src/a.ts", 2],
+    ]);
   });
 
-  test("only the most recent selection wins", async () => {
-    const slow = deferred<BlastRadius>();
-    let call = 0;
-    const store = h.withApi({
-      blastRadius: (path) => {
-        call += 1;
-        return call === 1 ? slow.promise : Promise.resolve({ origin: path, nodes: [{ id: "src/c.ts", depth: 2 }] });
-      },
-    });
-    await store.getState().load(ROOT);
-    const first = store.getState().inspectBlast("src/a.ts");
-    await store.getState().inspectBlast("src/b.ts");
-    slow.resolve({ origin: "src/a.ts", nodes: [{ id: "src/zzz.ts", depth: 1 }] });
-    await first;
+  test("switching it on with nothing selected arms it for the next selection", async () => {
+    const store = await loadedChain();
+    store.getState().setReach("blast");
+    expect(store.getState().blast).toBeNull();
+    store.getState().select("src/b.ts");
     expect(store.getState().blast?.origin).toBe("src/b.ts");
-    expect(store.getState().blast?.depths?.get("src/c.ts")).toBe(2);
+    expect(depthsOf(store)).toEqual([["src/a.ts", 1]]);
   });
 
-  test("a failed lookup clears the selection and reports the error", async () => {
-    const store = h.withApi({
-      blastRadius: () => Promise.reject(new Error("src/gone.ts is not part of the graph")),
-    });
-    await store.getState().load(ROOT);
-    await store.getState().inspectBlast("src/gone.ts");
+  test("switching it off keeps the selection and goes back to its direct neighbours", async () => {
+    const store = await loadedChain();
+    store.getState().select("src/c.ts");
+    store.getState().setReach("blast");
+    store.getState().setReach("direct");
+    expect(store.getState().selected).toBe("src/c.ts");
     expect(store.getState().blast).toBeNull();
-    expect(store.getState().error).toBe("src/gone.ts is not part of the graph");
   });
 
-  test("leaving blast mode clears the selection and cancels in-flight lookups", async () => {
-    const pending = deferred<BlastRadius>();
-    const store = h.withApi({ blastRadius: () => pending.promise });
+  test("selecting another file moves the blast radius with it", async () => {
+    const store = await loadedChain();
+    store.getState().setReach("blast");
+    store.getState().select("src/c.ts");
+    store.getState().select("src/b.ts");
+    expect(store.getState().blast?.origin).toBe("src/b.ts");
+    expect(depthsOf(store)).toEqual([["src/a.ts", 1]]);
+  });
+
+  test("clearing the selection clears the blast radius but leaves the reach on", async () => {
+    const store = await loadedChain();
+    store.getState().setReach("blast");
+    store.getState().select("src/c.ts");
+    store.getState().select(null);
+    expect(store.getState().blast).toBeNull();
+    expect(store.getState().reach).toBe("blast");
+  });
+
+  test("a file nothing imports has an empty radius, not no radius", async () => {
+    const store = await loadedChain();
+    store.getState().setReach("blast");
+    store.getState().select("src/a.ts");
+    expect(store.getState().blast).toEqual({ origin: "src/a.ts", depths: new Map() });
+  });
+
+  test("repeating the same selection or reach does not publish a new blast", async () => {
+    const store = await loadedChain();
+    store.getState().setReach("blast");
+    store.getState().select("src/c.ts");
+    const before = store.getState().blast;
+    store.getState().select("src/c.ts");
+    store.getState().setReach("blast");
+    expect(store.getState().blast).toBe(before);
+  });
+
+  test("agrees with the inspector about how many files a change can reach", async () => {
+    const store = await loadedChain();
+    store.getState().setReach("blast");
+    store.getState().select("src/c.ts");
+    const { blast, snapshot } = store.getState();
+    if (snapshot === null) throw new Error("the fixture graph did not load");
+    const inspected = inspectFile(graphIndexFor(snapshot), "src/c.ts", { activity: undefined, turn: 0, now: 0 });
+    expect(blast?.depths.size).toBe(inspected?.affected);
+  });
+
+  test("a refresh recomputes the radius from the new imports", async () => {
+    let current = CHAIN;
+    const store = h.withApi({ build: () => Promise.resolve(current), snapshot: () => Promise.resolve(current) });
     await store.getState().load(ROOT);
-    store.getState().setMode("blast");
-    const request = store.getState().inspectBlast("src/b.ts");
-    store.getState().setMode("explore");
-    pending.resolve({ origin: "src/b.ts", nodes: [] });
+    store.getState().setReach("blast");
+    store.getState().select("src/c.ts");
+    current = makeSnapshot(
+      ["src/a.ts", "src/b.ts", "src/c.ts", "src/d.ts"],
+      [
+        ["src/a.ts", "src/b.ts"],
+        ["src/b.ts", "src/c.ts"],
+        ["src/d.ts", "src/c.ts"],
+      ],
+    );
+    await store.getState().refresh();
+    expect(depthsOf(store)).toEqual([
+      ["src/b.ts", 1],
+      ["src/d.ts", 1],
+      ["src/a.ts", 2],
+    ]);
+  });
+
+  test("a refresh that removes the selected file clears the selection and the radius together", async () => {
+    let current = CHAIN;
+    const store = h.withApi({ build: () => Promise.resolve(current), snapshot: () => Promise.resolve(current) });
+    await store.getState().load(ROOT);
+    store.getState().setReach("blast");
+    store.getState().select("src/c.ts");
+    current = makeSnapshot(["src/a.ts", "src/b.ts"], [["src/a.ts", "src/b.ts"]]);
+    await store.getState().refresh();
+    expect(store.getState().selected).toBeNull();
+    expect(store.getState().blast).toBeNull();
+  });
+
+  test("reindexing keeps the reach, the selection and its radius", async () => {
+    const store = await loadedChain();
+    store.getState().setReach("blast");
+    store.getState().select("src/c.ts");
+    const request = store.getState().reindex();
+    expect(store.getState().blast?.origin).toBe("src/c.ts");
     await request;
-    expect(store.getState().mode).toBe("explore");
-    expect(store.getState().blast).toBeNull();
+    expect(store.getState().reach).toBe("blast");
+    expect(depthsOf(store)).toEqual([
+      ["src/b.ts", 1],
+      ["src/a.ts", 2],
+    ]);
   });
 
+  test("opening another workspace keeps the reach but drops the selection and the radius", async () => {
+    const store = await loadedChain();
+    store.getState().setReach("blast");
+    store.getState().select("src/c.ts");
+    await store.getState().load("C:/other");
+    expect(store.getState().reach).toBe("blast");
+    expect(store.getState().selected).toBeNull();
+    expect(store.getState().blast).toBeNull();
+  });
+});
+
+describe("view state", () => {
   test("starts coloured by role, at the overview, with nothing selected", () => {
     const { colorBy, level, selected } = h.store.getState();
     expect([colorBy, level, selected]).toEqual(["role", "overview", null]);
@@ -415,33 +513,11 @@ describe("blast radius", () => {
     expect(store.getState().selected).toBeNull();
   });
 
-  test("entering blast mode keeps the colour mode and starts without a selection", () => {
+  test("changing the reach keeps the colour mode", () => {
     h.store.getState().setColorBy("directory");
-    h.store.getState().setMode("blast");
-    expect(h.store.getState().mode).toBe("blast");
+    h.store.getState().setReach("blast");
+    expect(h.store.getState().reach).toBe("blast");
     expect(h.store.getState().colorBy).toBe("directory");
-    expect(h.store.getState().blast).toBeNull();
-  });
-
-  test("refresh recomputes the selection when its file still exists", async () => {
-    await h.store.getState().load(ROOT);
-    await h.store.getState().inspectBlast("src/b.ts");
-    await h.store.getState().refresh();
-    expect(h.blastCalls).toEqual(["src/b.ts", "src/b.ts"]);
-    expect(h.store.getState().blast?.depths?.get("src/a.ts")).toBe(1);
-  });
-
-  test("refresh drops the selection when its file disappeared", async () => {
-    let current = makeSnapshot(["src/a.ts", "src/b.ts"]);
-    const store = h.withApi({
-      build: () => Promise.resolve(current),
-      snapshot: () => Promise.resolve(current),
-    });
-    await store.getState().load(ROOT);
-    await store.getState().inspectBlast("src/b.ts");
-    current = makeSnapshot(["src/a.ts"]);
-    await store.getState().refresh();
-    expect(store.getState().blast).toBeNull();
   });
 });
 
@@ -465,11 +541,6 @@ describe("blast highlight state", () => {
     expect(blastRole(blast, "src/unrelated.ts")).toEqual({ kind: "outside" });
   });
 
-  test("does not dim the graph while the radius is still loading", () => {
-    const loading = { origin: "src/leaf.ts", depths: null };
-    expect(blastRole(loading, "src/leaf.ts")).toEqual({ kind: "origin" });
-    expect(blastRole(loading, "src/mid.ts")).toEqual({ kind: "inactive" });
-  });
 });
 
 describe("positions and failures", () => {

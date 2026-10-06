@@ -68,7 +68,7 @@ export function SessionPicker() {
       <Picker
         label="Style"
         hint="Choose Claude's output style"
-        detail="Applies from the next session"
+        detail="Applies to the next thread you start or resume"
         value={settings.outputStyle}
         options={mergeOutputStyles(outputStyles, [settings.outputStyle])}
         labelOf={outputStyleLabel}

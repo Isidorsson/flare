@@ -52,6 +52,7 @@ export function openFixture(size: FixtureSize): ScriptStep[] {
   setStubSnapshot(snapshot);
   workspaceStore.getState().setRoot(snapshot.root);
   graphStore.getState().setColorBy(colorFromParams());
+  graphStore.getState().setReach(params.get("reach") === "blast" ? "blast" : "direct");
   graphStore.getState().setLevel(params.get("level") === "files" ? "files" : "overview");
   void loadAndSelect(snapshot);
   return agentScript(snapshot);
