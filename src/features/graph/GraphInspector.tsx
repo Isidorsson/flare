@@ -145,7 +145,8 @@ export function GraphInspector({ onOpenFile }: { onOpenFile: (id: string) => voi
   const snapshot = useGraph((state) => state.snapshot);
   const activity = useGraph((state) => (state.selected === null ? undefined : state.activity.nodes.get(state.selected)));
   const turn = useGraph((state) => state.activity.turn);
-  if (selected === null || snapshot === null) return null;
+  const blasting = useGraph((state) => state.mode === "blast");
+  if (selected === null || snapshot === null || blasting) return null;
   const model = inspectFile(graphIndexFor(snapshot), selected, { activity, turn, now: clock() });
   return model === null ? null : <Inspector key={selected} model={model} onOpen={onOpenFile} />;
 }
