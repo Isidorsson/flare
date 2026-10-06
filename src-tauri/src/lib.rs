@@ -1,7 +1,23 @@
+mod bridge;
+
+use tauri::{Manager, RunEvent};
+
 pub fn run() {
     tauri::Builder::default()
-        .run(tauri::generate_context!())
-        .expect("failed to run Flare");
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_shell::init())
+        .manage(bridge::BridgeState::default())
+        .invoke_handler(tauri::generate_handler![
+            bridge::bridge_start,
+            bridge::bridge_send
+        ])
+        .build(tauri::generate_context!())
+        .expect("failed to build Flare")
+        .run(|app, event| {
+            if let RunEvent::Exit = event {
+                app.state::<bridge::BridgeState>().kill();
+            }
+        });
 }
 
 #[cfg(test)]
