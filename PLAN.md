@@ -91,18 +91,14 @@ Flare/
 - [x] **Right panel tabs.** Files | Graph | Split (side by side with a divider). The graph keeps indexing and tracking activity while hidden.
 - [x] **Tooltips.** Shared `Tooltip` component; every control has a tooltip, `IconButton` requires a label, disabled buttons explain why.
 
-### In progress
-- [ ] **Graph redesign** (branch `graph-style`). Layout and interaction from the reference screenshots, in Flare's own colours (do not copy the reference palette):
-  - Overview level with folders as hubs (`src/ 15`), touched files as star sparks, untouched files as faint dust.
-  - Soft region glows by role (frontend, database, config, tests, API…) with a role legend.
-  - Zoom levels: Overview | Files | Symbols.
-  - HUD chips: files, visited, edited, read only, `+A −R this turn`.
-  - Folder activity badges ("3 edited · 3 read").
-  - Agent pill "Claude Editing · file", dashed path through recently visited files, selection ring.
-  - Blast radius as curved dashed arcs (importers vs imports).
-  - File inspector panel: Open, Replay change, agent activity, this-turn mini diff, symbols, imported-by list with "This change can affect N files; X tests cover it".
-  - Calm palette, importance-based sizing, no overlapping labels, neighbourhood highlight on hover.
-  - Dev-only graph lab page with fixture projects for visual iteration.
+### Graph redesign (done 2026-10-06)
+- [x] Overview level with folders as hubs, touched files as star sparks, untouched files as dust; Files level with import edges; Role / Language / Folder colouring in Flare's own tokens.
+- [x] Region glows per folder cluster, legend with counts, HUD chips, comet pill, dashed blast-radius arcs, closable file inspector (activity, imported by, imports, "can affect N files; X tests cover it").
+- [x] Nested-disc folder layout replacing ForceAtlas2; premultiplied-alpha edge fix; dev-only lab at `/graph-lab.html` (`?size=small|medium|large&play=1`).
+- [ ] Symbols level (needs a symbol index).
+- [ ] Inspector: Replay change, this-turn mini diff, symbols list.
+- [ ] HUD `+A −R` split (router must pass added/removed counts).
+- [ ] Folder hub click behaviour, curved import edges, denser large-project overview.
 
 ### Next
 - [ ] **6. Polish (original plan).**
