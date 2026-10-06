@@ -1,5 +1,6 @@
 mod bridge;
 pub mod fs;
+mod graph;
 mod pty;
 
 use tauri::{AppHandle, Manager, RunEvent};
@@ -10,6 +11,7 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .manage(bridge::BridgeState::default())
         .manage(fs::FsState::default())
+        .manage(graph::GraphState::default())
         .manage(pty::PtyState::default())
         .invoke_handler(tauri::generate_handler![
             bridge::bridge_start,
@@ -21,6 +23,11 @@ pub fn run() {
             fs::commands::fs_write_file,
             fs::commands::fs_subscribe,
             fs::commands::fs_unsubscribe,
+            graph::commands::graph_build,
+            graph::commands::graph_snapshot,
+            graph::commands::graph_blast_radius,
+            graph::commands::graph_update_file,
+            graph::commands::graph_remove_file,
             pty::commands::pty_spawn,
             pty::commands::pty_write,
             pty::commands::pty_resize,
