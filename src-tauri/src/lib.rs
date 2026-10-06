@@ -1,5 +1,17 @@
+pub mod fs;
+
 pub fn run() {
     tauri::Builder::default()
+        .manage(fs::FsState::default())
+        .invoke_handler(tauri::generate_handler![
+            fs::commands::fs_open_workspace,
+            fs::commands::fs_close_workspace,
+            fs::commands::fs_list_dir,
+            fs::commands::fs_read_file,
+            fs::commands::fs_write_file,
+            fs::commands::fs_subscribe,
+            fs::commands::fs_unsubscribe,
+        ])
         .run(tauri::generate_context!())
         .expect("failed to run Flare");
 }
