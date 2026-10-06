@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test";
+import type { RenderParams } from "sigma/types";
 
 import type { AppearanceContext } from "./appearance";
-import { edgeStyle, lengthFade, restingEdgeAlpha, showsArrows, type EdgeInfo } from "./edge-appearance";
+import { edgeStyle, lengthFade, restingEdgeAlpha, screenSpaceParams, type EdgeInfo } from "./edge-appearance";
+import { EDGE_TYPE } from "./graph-model";
 import { sizeScale } from "./node-scale";
 import { fixtureActivityPalette, fixturePalette } from "./palette-fixture";
 
@@ -23,17 +25,16 @@ function context(overrides: Partial<AppearanceContext> = {}): AppearanceContext 
     sizeFactor: 1,
     layoutSpan: 100,
     edgeAlpha: 0.3,
-    arrows: true,
     ...overrides,
   };
 }
 
-function importEdge(source: string, target: string): EdgeInfo {
-  return { kind: "import", source, target, betweenHubs: false, length: 10 };
+function importEdge(source: string, target: string, extra: Partial<EdgeInfo> = {}): EdgeInfo {
+  return { kind: "import", source, target, betweenHubs: false, length: 10, mutual: false, drawnAsArc: false, ...extra };
 }
 
 function treeEdge(source: string, target: string, betweenHubs: boolean): EdgeInfo {
-  return { kind: "tree", source, target, betweenHubs, length: 10 };
+  return { kind: "tree", source, target, betweenHubs, length: 10, mutual: false, drawnAsArc: false };
 }
 
 function depthColor(index: number): string {
@@ -62,11 +63,6 @@ describe("restingEdgeAlpha", () => {
     expect(restingEdgeAlpha(0)).toBeLessThanOrEqual(0.75);
     expect(restingEdgeAlpha(10_000_000)).toBeCloseTo(0.16, 5);
   });
-
-  test("keeps arrowheads for small graphs only", () => {
-    expect(showsArrows(120)).toBe(true);
-    expect(showsArrows(2000)).toBe(false);
-  });
 });
 
 describe("lengthFade", () => {
@@ -89,12 +85,38 @@ describe("import edges", () => {
     expect(short.color).not.toBe(long.color);
   });
 
-  test("are faint and thin at rest, and drawn as arrows or plain lines by density", () => {
+  test("are faint, thin plain lines at rest", () => {
     const style = edgeStyle(importEdge("src/a.ts", "src/b.ts"), context());
     expect(style.size).toBeLessThanOrEqual(1);
     expect(style.color.startsWith("rgba(")).toBe(true);
-    expect(style.type).toBe("arrow");
-    expect(edgeStyle(importEdge("src/a.ts", "src/b.ts"), context({ arrows: false })).type).toBe("line");
+    expect(style.type).toBe(EDGE_TYPE);
+  });
+
+  test("draw a pair of files that import each other as one line", () => {
+    const forward = edgeStyle(importEdge("a.lua", "b.lua", { mutual: true }), context());
+    const backward = edgeStyle(importEdge("b.lua", "a.lua", { mutual: true }), context());
+    expect([forward.hidden, backward.hidden].filter((hidden) => !hidden)).toHaveLength(1);
+  });
+
+  test("keep the stronger direction's style for a mutual pair, so a blast path is never lost", () => {
+    const ctx = context({ blast });
+    const kept = edgeStyle(importEdge("src/leaf.ts", "src/mid.ts", { mutual: true }), ctx);
+    expect(kept.hidden).toBe(false);
+    expect(kept.color).toBe(depthColor(0));
+  });
+
+  test("give a mutual pair touching the active file its own colour", () => {
+    const ctx = context({ focus: { node: "a.lua", neighbours: new Set(["b.lua", "c.lua"]) } });
+    const mutual = edgeStyle(importEdge("a.lua", "b.lua", { mutual: true }), ctx).color;
+    const outgoing = edgeStyle(importEdge("a.lua", "c.lua"), ctx).color;
+    const incoming = edgeStyle(importEdge("c.lua", "a.lua"), ctx).color;
+    expect(new Set([mutual, outgoing, incoming]).size).toBe(3);
+  });
+
+  test("leave the pairs the selection draws as arcs to the overlay", () => {
+    const ctx = context({ selected: "src/a.ts" });
+    expect(edgeStyle(importEdge("src/a.ts", "src/b.ts", { drawnAsArc: true }), ctx).hidden).toBe(true);
+    expect(edgeStyle(importEdge("src/a.ts", "src/b.ts"), ctx).hidden).toBe(false);
   });
 
   test("are hidden in the overview until a file is selected or hovered", () => {
@@ -135,16 +157,50 @@ describe("import edges", () => {
 });
 
 describe("folder links", () => {
-  test("show only between two hubs", () => {
-    expect(edgeStyle(treeEdge("a", "b", true), context()).hidden).toBe(false);
-    expect(edgeStyle(treeEdge("a", "b", false), context()).hidden).toBe(true);
+  const overview = context({ level: "overview" });
+
+  test("show only between two hubs, and only in the overview", () => {
+    expect(edgeStyle(treeEdge("a", "b", true), overview).hidden).toBe(false);
+    expect(edgeStyle(treeEdge("a", "b", false), overview).hidden).toBe(true);
+    expect(edgeStyle(treeEdge("a", "b", true), context({ level: "files" })).hidden).toBe(true);
   });
 
-  test("are fainter at the files level than in the overview, and brighten around a hovered hub", () => {
-    const overview = edgeStyle(treeEdge("a", "b", true), context({ level: "overview" }));
-    const files = edgeStyle(treeEdge("a", "b", true), context({ level: "files" }));
-    expect(overview.color).not.toBe(files.color);
+  test("sit under every import and are no wider than one", () => {
+    const link = edgeStyle(treeEdge("a", "b", true), overview);
+    const imported = edgeStyle(importEdge("x", "y"), context({ level: "overview", selected: "x" }));
+    expect(link.zIndex).toBeLessThan(imported.zIndex);
+    expect(link.size).toBeLessThanOrEqual(edgeStyle(importEdge("x", "y"), context()).size);
+  });
+
+  test("brighten around a hovered hub", () => {
     const hovered = edgeStyle(treeEdge("a", "b", true), context({ level: "overview", focus: { node: "a", neighbours: new Set() } }));
-    expect(hovered.zIndex).toBeGreaterThan(overview.zIndex);
+    expect(hovered.zIndex).toBeGreaterThan(edgeStyle(treeEdge("a", "b", true), overview).zIndex);
+    expect(hovered.color).not.toBe(edgeStyle(treeEdge("a", "b", true), overview).color);
+  });
+});
+
+describe("screenSpaceParams", () => {
+  function params(zoomRatio: number): RenderParams {
+    return {
+      matrix: new Float32Array(9),
+      invMatrix: new Float32Array(9),
+      width: 800,
+      height: 600,
+      pixelRatio: 2,
+      zoomRatio,
+      cameraAngle: 0,
+      sizeRatio: Math.sqrt(zoomRatio),
+      correctionRatio: 0.004,
+      downSizingRatio: 1,
+      minEdgeThickness: 1,
+      antiAliasingFeather: 1,
+    };
+  }
+
+  test("keeps edge widths in screen pixels at any zoom, leaving every other parameter alone", () => {
+    for (const zoom of [0.03, 1, 30]) {
+      const original = params(zoom);
+      expect(screenSpaceParams(original)).toEqual({ ...original, sizeRatio: 1 });
+    }
   });
 });

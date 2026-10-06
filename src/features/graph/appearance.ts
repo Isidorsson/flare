@@ -40,8 +40,6 @@ export interface AppearanceContext {
   readonly layoutSpan: number;
   /** Alpha for a resting import edge; thinner for dense graphs. */
   readonly edgeAlpha: number;
-  /** Whether import edges carry arrowheads; they only help while the graph is small. */
-  readonly arrows: boolean;
 }
 
 export interface NodeInfo {
