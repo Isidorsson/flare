@@ -112,3 +112,40 @@ fn a_sibling_file_wins_over_an_init_module() {
     indexer.update_file("m.lua").unwrap();
     assert_eq!(imports_of(&indexer, "a.lua"), ["m.lua"]);
 }
+
+#[test]
+fn every_spelling_of_the_same_require_yields_one_edge() {
+    let source = "local a = require(\"util.str\")\nlocal b = require \"util.str\"\nlocal c = require 'util.str'\nlocal d = require[[util.str]]\nlocal e = require(\"util/str\")\nlocal f = require('util.str')\n";
+    let fixture = Fixture::new(&[("main.lua", source), ("util/str.lua", "")]);
+    let mut indexer = fixture.index();
+    assert_eq!(edges(&indexer), vec![pair("main.lua", "util/str.lua")]);
+    fixture.write("main.lua", &format!("{source}require('util.str')\n"));
+    indexer.update_file("main.lua").unwrap();
+    assert_eq!(edges(&indexer), vec![pair("main.lua", "util/str.lua")]);
+}
+
+#[test]
+fn edges_keep_their_direction_and_only_mutual_requires_go_both_ways() {
+    let fixture = Fixture::new(&[
+        (
+            "AIO.lua",
+            "local AIO = AIO or require(\"AIO\")\nlocal q = require(\"queue\")\n",
+        ),
+        ("queue.lua", ""),
+        (
+            "Server.lua",
+            "local AIO = require(\"AIO\")\nlocal p = require(\"Peer\")\n",
+        ),
+        ("Peer.lua", "local s = require(\"Server\")\n"),
+    ]);
+    let indexer = fixture.index();
+    assert_eq!(
+        edges(&indexer),
+        vec![
+            pair("AIO.lua", "queue.lua"),
+            pair("Peer.lua", "Server.lua"),
+            pair("Server.lua", "AIO.lua"),
+            pair("Server.lua", "Peer.lua"),
+        ]
+    );
+}
