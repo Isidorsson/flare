@@ -8,6 +8,7 @@ src-tauri/gen/
 bridge/dist/
 bridge/out/
 bridge/bin/
+src-tauri/binaries/
 
 .env
 .env.*
