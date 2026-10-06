@@ -1,6 +1,6 @@
 import { EFFORT_LEVELS, type Effort } from "@flare/protocol";
 import { Check, ChevronDown, ChevronRight } from "lucide-react";
-import { useId, useRef, useState } from "react";
+import { useId, useRef, useState, type KeyboardEvent } from "react";
 
 import {
   EFFORT_DESCRIPTIONS,
@@ -13,6 +13,8 @@ import {
 import { anchorNameFor } from "@/shared/ui/anchor-name";
 import { Tooltip } from "@/shared/ui/Tooltip";
 
+import { columnAfterArrow, columnOfRole, type MenuColumn } from "./menu-keys";
+
 interface ModelEffortMenuProps {
   model: Model;
   effort: Effort;
@@ -22,11 +24,31 @@ interface ModelEffortMenuProps {
 const ITEM =
   "flex h-7 w-full items-center gap-2 rounded px-2 text-left text-xs text-fg hover:bg-surface-3 focus-visible:bg-surface-3 focus-visible:outline-none";
 
+const COLUMN_TARGET: Record<MenuColumn, string> = {
+  models: '[role="menuitem"][aria-expanded="true"]',
+  efforts: '[role="menuitemradio"]',
+};
+
+function focusColumn(menu: HTMLElement | null, column: MenuColumn) {
+  const entries = [...(menu?.querySelectorAll<HTMLElement>(COLUMN_TARGET[column]) ?? [])];
+  const checked = entries.find((entry) => entry.getAttribute("aria-checked") === "true");
+  (checked ?? entries[0])?.focus();
+}
+
 export function ModelEffortMenu({ model, effort, onChange }: ModelEffortMenuProps) {
   const menuId = useId();
   const anchor = anchorNameFor("model-menu", menuId);
   const popover = useRef<HTMLDivElement>(null);
   const [highlighted, setHighlighted] = useState<Model>(model);
+
+  function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    const { target } = event;
+    const from = target instanceof HTMLElement ? columnOfRole(target.getAttribute("role")) : null;
+    const to = from === null ? null : columnAfterArrow(event.key, from);
+    if (to === null) return;
+    event.preventDefault();
+    focusColumn(popover.current, to);
+  }
 
   return (
     <>
@@ -51,10 +73,17 @@ export function ModelEffortMenu({ model, effort, onChange }: ModelEffortMenuProp
         onToggle={(event) => {
           if (event.newState === "open") setHighlighted(model);
         }}
+        onKeyDown={handleKeyDown}
         style={{ positionAnchor: anchor, positionArea: "top span-right" }}
         className="inset-auto m-0 mb-1 gap-1 rounded-lg border border-border-strong bg-surface-2 p-1 shadow-lg open:flex"
       >
-        <ModelList highlighted={highlighted} onHighlight={setHighlighted} />
+        <ModelList
+          highlighted={highlighted}
+          onHighlight={setHighlighted}
+          onEnter={() => {
+            focusColumn(popover.current, "efforts");
+          }}
+        />
         <EffortList
           model={highlighted}
           checked={highlighted === model ? effort : null}
@@ -68,7 +97,13 @@ export function ModelEffortMenu({ model, effort, onChange }: ModelEffortMenuProp
   );
 }
 
-function ModelList({ highlighted, onHighlight }: { highlighted: Model; onHighlight: (model: Model) => void }) {
+interface ModelListProps {
+  highlighted: Model;
+  onHighlight: (model: Model) => void;
+  onEnter: () => void;
+}
+
+function ModelList({ highlighted, onHighlight, onEnter }: ModelListProps) {
   return (
     <ul className="w-28">
       {MODEL_IDS.map((id) => (
@@ -84,6 +119,10 @@ function ModelList({ highlighted, onHighlight }: { highlighted: Model; onHighlig
               }}
               onFocus={() => {
                 onHighlight(id);
+              }}
+              onClick={() => {
+                onHighlight(id);
+                onEnter();
               }}
               className={`${ITEM} ${id === highlighted ? "bg-surface-3" : ""}`}
             >

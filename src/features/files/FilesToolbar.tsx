@@ -41,7 +41,7 @@ function FollowSwitch() {
   const follow = useFiles((state) => state.follow);
   const setFollow = useFiles((state) => state.setFollow);
   return (
-    <Tooltip content="Follow the agent in the editor" detail="Opens each file it reads or edits and shows the work live">
+    <Tooltip content="Follow the agent in the editor" detail="Opens each file it reads or edits and shows the work live. Pauses while you type, after you pick a file, or with unsaved edits">
       <button
         type="button"
         role="switch"

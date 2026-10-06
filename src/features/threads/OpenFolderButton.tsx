@@ -35,7 +35,7 @@ export function OpenFolderButton() {
   return (
     <div className="border-b border-border p-2">
       <Tooltip
-        content={root === null ? "Open a project folder for Claude to work in" : "Change the project folder"}
+        content={root === null ? "Open a project folder for Claude to work in" : "Change the project folder and start a new thread"}
         detail={root ?? undefined}
         side="right"
       >
