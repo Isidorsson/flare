@@ -4,6 +4,9 @@ import { hasTab, type TerminalStore } from "./terminal-store";
 export interface TerminalSession {
   mount: (container: HTMLElement) => () => void;
   focus: () => void;
+  /** Tears down the view only; the shell keeps running until it is killed. */
+  detach: () => void;
+  /** Detaches the view and kills the shell. */
   dispose: () => Promise<void>;
 }
 
@@ -21,6 +24,8 @@ export type SessionFactory = (options: SessionOptions, events: SessionEvents) =>
 export interface ControllerDeps {
   store: TerminalStore;
   createSession: SessionFactory;
+  /** Kills every shell the backend holds and resolves to how many it closed. */
+  killAll: () => Promise<number>;
   getCwd: () => string | null;
   newId: () => string;
 }
@@ -28,7 +33,16 @@ export interface ControllerDeps {
 export interface TerminalController {
   openTab: () => string;
   closeTab: (id: string) => void;
+  closeAll: () => void;
   getSession: (id: string) => TerminalSession | undefined;
+}
+
+async function reportFailure(action: string, task: () => Promise<unknown>): Promise<void> {
+  try {
+    await task();
+  } catch (error) {
+    console.error(`flare: failed to ${action}`, error);
+  }
 }
 
 /**
@@ -36,16 +50,11 @@ export interface TerminalController {
  * only through here so a shell is never left running without a tab.
  */
 export function createTerminalController(deps: ControllerDeps): TerminalController {
-  const { store, createSession, getCwd, newId } = deps;
+  const { store, createSession, killAll, getCwd, newId } = deps;
   const sessions = new Map<string, TerminalSession>();
 
-  const disposeQuietly = async (session: TerminalSession): Promise<void> => {
-    try {
-      await session.dispose();
-    } catch (error) {
-      console.error("flare: failed to dispose terminal session", error);
-    }
-  };
+  const disposeQuietly = (session: TerminalSession) =>
+    reportFailure("dispose terminal session", () => session.dispose());
 
   const start = async (id: string): Promise<void> => {
     // A shell can exit before its session is registered; the tab must never
@@ -90,6 +99,15 @@ export function createTerminalController(deps: ControllerDeps): TerminalControll
       if (!session) return;
       sessions.delete(id);
       void disposeQuietly(session);
+    },
+
+    // A shell still starting has no session yet; it is disposed when it arrives and finds its tab gone.
+    closeAll: () => {
+      const live = [...sessions.values()];
+      sessions.clear();
+      store.getState().closeAllTabs();
+      for (const session of live) session.detach();
+      void reportFailure("close all terminals", killAll);
     },
 
     getSession: (id) => sessions.get(id),

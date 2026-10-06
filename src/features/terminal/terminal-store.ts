@@ -21,6 +21,7 @@ export interface TerminalState {
   nextOrdinal: number;
   addTab: (id: string) => void;
   closeTab: (id: string) => void;
+  closeAllTabs: () => void;
   setActive: (id: string) => void;
   renameTab: (id: string, title: string) => void;
   setStatus: (id: string, status: TabStatus) => void;
@@ -79,6 +80,10 @@ export function createTerminalStore() {
         tabs: tabs.filter((tab) => tab.id !== id),
         activeId: activeId === id ? neighbourAfterClose(tabs, id) : activeId,
       });
+    },
+
+    closeAllTabs: () => {
+      set({ tabs: [], activeId: null });
     },
 
     setActive: (id) => {

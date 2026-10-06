@@ -93,6 +93,33 @@ describe("terminal tab store", () => {
     });
   });
 
+  describe("closing everything", () => {
+    test("removes every tab and clears the active one", () => {
+      const store = storeWithTabs("a", "b", "c");
+      store.getState().closeAllTabs();
+
+      expect(store.getState().tabs).toEqual([]);
+      expect(store.getState().activeId).toBeNull();
+    });
+
+    test("is a no-op without tabs", () => {
+      const store = createTerminalStore();
+      store.getState().closeAllTabs();
+
+      expect(store.getState().tabs).toEqual([]);
+    });
+
+    test("keeps numbering forward and ignores late updates for the closed tabs", () => {
+      const store = storeWithTabs("a", "b");
+      store.getState().closeAllTabs();
+      store.getState().setStatus("a", { kind: "exited", code: 0 });
+      store.getState().addTab("c");
+
+      expect(store.getState().tabs.map((tab) => tab.title)).toEqual(["Terminal 3"]);
+      expect(store.getState().activeId).toBe("c");
+    });
+  });
+
   describe("renaming", () => {
     test("trims and applies the new title", () => {
       const store = storeWithTabs("a");

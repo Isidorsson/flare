@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { describeExit, parsePtyMessage } from "./pty-protocol";
+import { describeExit, parseClosedCount, parsePtyMessage } from "./pty-protocol";
 
 describe("pty channel messages", () => {
   test("decodes a raw frame into output bytes", () => {
@@ -49,5 +49,18 @@ describe("pty channel messages", () => {
   test("describes exits for humans", () => {
     expect(describeExit(0)).toBe("process exited with code 0");
     expect(describeExit(null)).toBe("process exited");
+  });
+});
+
+describe("pty_kill_all result", () => {
+  test("accepts a count of closed terminals, including none", () => {
+    expect(parseClosedCount(0)).toBe(0);
+    expect(parseClosedCount(3)).toBe(3);
+  });
+
+  test("rejects anything that is not a whole, non-negative number", () => {
+    for (const bad of [-1, 1.5, "2", null, undefined, { count: 2 }]) {
+      expect(() => parseClosedCount(bad)).toThrow();
+    }
   });
 });

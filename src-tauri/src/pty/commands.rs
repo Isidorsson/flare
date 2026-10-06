@@ -141,7 +141,13 @@ pub fn pty_resize(
 
 #[tauri::command]
 pub fn pty_kill(state: State<'_, PtyState>, id: String) -> Result<(), PtyError> {
-    state.kill(&id)
+    state.kill(&id).map(drop)
+}
+
+/// Returns how many terminals were closed.
+#[tauri::command]
+pub fn pty_kill_all(state: State<'_, PtyState>) -> Result<usize, PtyError> {
+    state.kill_all().into_count()
 }
 
 #[cfg(test)]

@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronUp, Plus, SquareTerminal } from "lucide-react";
+import { ChevronDown, ChevronUp, OctagonX, Plus, SquareTerminal } from "lucide-react";
 
 import { TERMINAL_HEADER_HEIGHT } from "@/features/shell/layout-constants";
 import type { SizeBounds } from "@/shared/lib/splitter-math";
@@ -25,7 +25,6 @@ export function TerminalDrawer({ open, height, bounds, onToggle, onResize }: Ter
   const activeId = useTerminal((state) => state.activeId);
   const setActive = useTerminal((state) => state.setActive);
   const renameTab = useTerminal((state) => state.renameTab);
-  const ToggleIcon = open ? ChevronDown : ChevronUp;
 
   const handleToggle = () => {
     if (!open && tabs.length === 0) terminalController.openTab();
@@ -59,13 +58,7 @@ export function TerminalDrawer({ open, height, bounds, onToggle, onResize }: Ter
         )}
         {open && <IconButton icon={Plus} label="New terminal" onClick={terminalController.openTab} />}
         <span className="flex-1" />
-        <IconButton
-          icon={ToggleIcon}
-          label={open ? "Collapse terminal" : "Expand terminal"}
-          aria-expanded={open}
-          aria-controls={BODY_ID}
-          onClick={handleToggle}
-        />
+        <DrawerActions open={open} hasTabs={tabs.length > 0} onToggle={handleToggle} />
       </div>
       <div
         id={BODY_ID}
@@ -80,6 +73,32 @@ export function TerminalDrawer({ open, height, bounds, onToggle, onResize }: Ter
         )}
       </div>
     </section>
+  );
+}
+
+interface DrawerActionsProps {
+  open: boolean;
+  hasTabs: boolean;
+  onToggle: () => void;
+}
+
+function DrawerActions({ open, hasTabs, onToggle }: DrawerActionsProps) {
+  return (
+    <>
+      <IconButton
+        icon={OctagonX}
+        label="Close all terminals"
+        disabled={!hasTabs}
+        onClick={terminalController.closeAll}
+      />
+      <IconButton
+        icon={open ? ChevronDown : ChevronUp}
+        label={open ? "Collapse terminal" : "Expand terminal"}
+        aria-expanded={open}
+        aria-controls={BODY_ID}
+        onClick={onToggle}
+      />
+    </>
   );
 }
 
