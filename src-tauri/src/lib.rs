@@ -1,5 +1,15 @@
+mod graph;
+
 pub fn run() {
     tauri::Builder::default()
+        .manage(graph::GraphState::default())
+        .invoke_handler(tauri::generate_handler![
+            graph::commands::graph_build,
+            graph::commands::graph_snapshot,
+            graph::commands::graph_blast_radius,
+            graph::commands::graph_update_file,
+            graph::commands::graph_remove_file,
+        ])
         .run(tauri::generate_context!())
         .expect("failed to run Flare");
 }
