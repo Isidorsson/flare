@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import {
   agentLabel,
+  agentTone,
   applyStatus,
   beginTurn,
   COMET_IDLE_MS,
@@ -221,6 +222,32 @@ describe("turns", () => {
     const state = record(initialActivity(), { path: "src/a.ts", kind: "read" }, 1);
     const node = state.nodes.get("src/a.ts");
     expect(node !== undefined && isChangedThisTurn(node, state.turn)).toBe(false);
+  });
+});
+
+describe("turn line tally", () => {
+  test("adds up the lines the agent changed this turn and resets with the turn", () => {
+    let state = record(initialActivity(), { path: "src/a.ts", kind: "edit", linesChanged: 12 }, 1);
+    state = record(state, { path: "src/b.ts", kind: "create", linesChanged: 30 }, 2);
+    expect(state.turnLines).toBe(42);
+    expect(beginTurn(state).turnLines).toBe(0);
+  });
+
+  test("ignores reads and changes made on disk", () => {
+    let state = record(initialActivity(), { path: "src/a.ts", kind: "read", linesChanged: 99 }, 1);
+    state = record(state, { path: "src/a.ts", kind: "edit", linesChanged: 5, source: "disk" }, 2);
+    expect(state.turnLines).toBe(0);
+  });
+});
+
+describe("agentTone", () => {
+  test("reading, searching and thinking explore; everything else is the agent at work", () => {
+    expect(agentTone("working", { kind: "read", subject: null })).toBe("explore");
+    expect(agentTone("working", { kind: "search", subject: null })).toBe("explore");
+    expect(agentTone("thinking", null)).toBe("explore");
+    expect(agentTone("working", { kind: "edit", subject: null })).toBe("agent");
+    expect(agentTone("working", { kind: "run", subject: null })).toBe("agent");
+    expect(agentTone("done", { kind: "read", subject: null })).toBe("agent");
   });
 });
 

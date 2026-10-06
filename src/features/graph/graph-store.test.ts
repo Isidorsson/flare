@@ -379,6 +379,42 @@ describe("blast radius", () => {
     expect(store.getState().blast).toBeNull();
   });
 
+  test("starts coloured by role, at the overview, with nothing selected", () => {
+    const { colorBy, level, selected } = h.store.getState();
+    expect([colorBy, level, selected]).toEqual(["role", "overview", null]);
+  });
+
+  test("selecting and switching levels are plain state changes", () => {
+    h.store.getState().select("src/a.ts");
+    h.store.getState().setLevel("files");
+    expect(h.store.getState().selected).toBe("src/a.ts");
+    expect(h.store.getState().level).toBe("files");
+    h.store.getState().select(null);
+    expect(h.store.getState().selected).toBeNull();
+  });
+
+  test("keeps the level and colour mode across a different workspace but drops the selection", async () => {
+    await h.store.getState().load(ROOT);
+    h.store.getState().select("src/a.ts");
+    h.store.getState().setLevel("files");
+    h.store.getState().setColorBy("language");
+    await h.store.getState().load("C:/other");
+    const { level, colorBy, selected } = h.store.getState();
+    expect([level, colorBy, selected]).toEqual(["files", "language", null]);
+  });
+
+  test("a refresh keeps the selection while its file exists and clears it once the file is gone", async () => {
+    let current = makeSnapshot(["src/a.ts", "src/b.ts"]);
+    const store = h.withApi({ snapshot: () => Promise.resolve(current) });
+    await store.getState().load(ROOT);
+    store.getState().select("src/a.ts");
+    await store.getState().refresh();
+    expect(store.getState().selected).toBe("src/a.ts");
+    current = makeSnapshot(["src/b.ts"]);
+    await store.getState().refresh();
+    expect(store.getState().selected).toBeNull();
+  });
+
   test("entering blast mode keeps the colour mode and starts without a selection", () => {
     h.store.getState().setColorBy("directory");
     h.store.getState().setMode("blast");

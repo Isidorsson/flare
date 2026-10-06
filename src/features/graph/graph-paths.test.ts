@@ -3,7 +3,6 @@ import { describe, expect, test } from "bun:test";
 import {
   baseName,
   createNodeResolver,
-  directoryKey,
   hashString,
   toAbsolutePath,
   toGraphPath,
@@ -48,13 +47,9 @@ describe("path helpers", () => {
     expect(toAbsolutePath("C:\\app\\", "src/a.ts")).toBe("C:/app/src/a.ts");
   });
 
-  test("baseName and directoryKey", () => {
+  test("baseName", () => {
     expect(baseName("src/features/chat/ChatPane.tsx")).toBe("ChatPane.tsx");
     expect(baseName("main.rs")).toBe("main.rs");
-    expect(directoryKey("src/features/chat/ChatPane.tsx")).toBe("src/features/chat");
-    expect(directoryKey("src/features/chat/deep/x.ts")).toBe("src/features/chat");
-    expect(directoryKey("src/a.ts")).toBe("src");
-    expect(directoryKey("main.rs")).toBe("");
   });
 
   test("hashString is deterministic, unsigned and spreads inputs", () => {

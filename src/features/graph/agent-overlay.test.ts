@@ -1,60 +1,20 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 
 import { activityColor } from "./activity-palette";
+import { withAlpha } from "./color-math";
 import { AgentOverlay, type OverlaySigma } from "./agent-overlay";
 import { FINISH_RING, TOUCH_RING, type ParticleEffect, type RingEffect } from "./effects";
 import type { GraphApi } from "./graph-api";
-import { snapshotToGraph, type CodeGraph } from "./graph-model";
+import type { CodeGraph } from "./graph-model";
+import { snapshotToGraph } from "./graph-sync";
 import { createGraphStore, type GraphStore } from "./graph-store";
 import { fixtureActivityPalette, fixturePalette } from "./palette-fixture";
-import type { Pen } from "./canvas-draw";
+import { RecordingPen } from "./pen-fixture";
 import type { Point } from "./placement";
 
 const ROOT = "C:\\work\\app";
 const colors = fixtureActivityPalette();
 const FRAME = 1000 / 60;
-
-interface Stroke {
-  readonly color: unknown;
-  readonly width: number;
-  readonly dashed: boolean;
-}
-
-class RecordingPen implements Pen {
-  fillStyle: string | CanvasGradient | CanvasPattern = "";
-  strokeStyle: string | CanvasGradient | CanvasPattern = "";
-  lineWidth = 1;
-  lineCap: CanvasLineCap = "butt";
-  lineDashOffset = 0;
-  font = "";
-  readonly texts: string[] = [];
-  readonly strokes: Stroke[] = [];
-  readonly arcs: { x: number; y: number; radius: number }[] = [];
-  private dashed = false;
-
-  save = () => undefined;
-  restore = () => undefined;
-  clearRect = () => undefined;
-  beginPath = () => undefined;
-  moveTo = () => undefined;
-  lineTo = () => undefined;
-  roundRect = () => undefined;
-  fill = () => undefined;
-  stroke = () => {
-    this.strokes.push({ color: this.strokeStyle, width: this.lineWidth, dashed: this.dashed });
-  };
-  arc = (x: number, y: number, radius: number) => {
-    this.arcs.push({ x, y, radius });
-  };
-  fillText = (text: string) => {
-    this.texts.push(text);
-  };
-  measureText = (text: string) => ({ width: text.length * 6 });
-  setLineDash = (segments: number[]) => {
-    this.dashed = segments.length > 0;
-  };
-  createRadialGradient = () => ({ addColorStop: () => undefined });
-}
 
 const sigma: OverlaySigma = {
   getDimensions: () => ({ width: 400, height: 300 }),
@@ -266,6 +226,16 @@ describe("drawing", () => {
     expect(h.agent.texts).toEqual(["Claude", "Editing · a.ts"]);
   });
 
+  test("calls the agent Explore while it only reads and Claude once it changes things", () => {
+    h.touch("src/a.ts", "read");
+    h.overlay.draw(false);
+    expect(h.agent.texts[0]).toBe("Explore");
+    h.agent.texts.length = 0;
+    h.touch("src/b.ts", "edit");
+    h.overlay.draw(false);
+    expect(h.agent.texts[0]).toBe("Claude");
+  });
+
   test("shows Thinking and Done, and nothing when idle", () => {
     h.touch("src/a.ts");
     h.store.getState().setAgentStatus("thinking");
@@ -283,8 +253,45 @@ describe("drawing", () => {
   test("still shows the label for a path outside the graph, without any node ring", () => {
     h.touch("C:\\elsewhere\\notes.txt");
     h.overlay.draw(false);
-    expect(h.agent.texts).toEqual(["Claude", "Reading · notes.txt"]);
+    expect(h.agent.texts).toEqual(["Explore", "Reading · notes.txt"]);
     expect(h.agent.arcs).toEqual([]);
+  });
+
+  test("draws nothing for selection when no file is selected", () => {
+    h.overlay.draw(false);
+    expect(h.agent.strokes.filter((stroke) => stroke.dashed)).toHaveLength(0);
+  });
+
+  test("ringed selection draws a dashed ring and an arc to each importer and import", () => {
+    h.store.getState().select("src/b.ts");
+    h.overlay.draw(false);
+    const dashed = h.agent.strokes.filter((stroke) => stroke.dashed);
+    expect(dashed).toHaveLength(2);
+    expect(String(dashed[0]?.color)).toBe(withAlpha(fixturePalette().importer, 0.72));
+  });
+
+  test("uses the other colour for what the selected file imports", () => {
+    h.store.getState().select("src/a.ts");
+    h.overlay.draw(false);
+    const arc = h.agent.strokes.find((stroke) => stroke.dashed);
+    expect(String(arc?.color)).toBe(withAlpha(fixturePalette().imports, 0.72));
+  });
+
+  test("a blast origin takes the place of the selection", () => {
+    h.store.getState().select("src/c.ts");
+    h.store.setState({ blast: { origin: "src/b.ts", depths: null } });
+    h.overlay.draw(false);
+    expect(h.agent.arcs.some((arc) => Math.hypot(arc.x - 300, arc.y - 100) < 20)).toBe(true);
+  });
+
+  test("selection arcs hold still under reduced motion", () => {
+    h.store.getState().select("src/b.ts");
+    time.now = 5000;
+    h.overlay.draw(true);
+    const first = h.agent.strokes.length;
+    time.now = 9000;
+    h.overlay.draw(true);
+    expect(h.agent.strokes.length).toBe(first * 2);
   });
 
   test("draws the dashed path through touched files, fading towards the oldest", () => {

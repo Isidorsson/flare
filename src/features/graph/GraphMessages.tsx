@@ -50,7 +50,7 @@ function InlineError({ message }: { message: string }) {
   return (
     <p
       role="alert"
-      className="pointer-events-none absolute inset-x-2 top-12 rounded-md border border-danger/40 bg-surface-1/90 px-2.5 py-1.5 text-xs text-danger backdrop-blur"
+      className="pointer-events-none absolute inset-x-2 top-2 rounded-md border border-danger/40 bg-surface-1/90 px-2.5 py-1.5 text-xs text-danger backdrop-blur"
     >
       {message}
     </p>

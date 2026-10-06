@@ -1,5 +1,3 @@
-export const DIRECTORY_COLOR_DEPTH = 3;
-
 const VERBATIM_PREFIX = "//?/";
 
 function normalizeSeparators(path: string): string {
@@ -40,11 +38,6 @@ export function toAbsolutePath(root: string, id: string): string {
 
 export function baseName(id: string): string {
   return id.slice(id.lastIndexOf("/") + 1);
-}
-
-export function directoryKey(id: string): string {
-  const directories = id.split("/").slice(0, -1);
-  return directories.slice(0, DIRECTORY_COLOR_DEPTH).join("/");
 }
 
 export function hashString(value: string): number {

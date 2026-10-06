@@ -67,8 +67,8 @@ export function trailSegments(points: readonly Point[]): TrailSegment[] {
 
 export const PILL_OFFSET = 16;
 export const PILL_MARGIN = 8;
-export const PILL_TOP_INSET = 44;
-export const PILL_BOTTOM_INSET = 40;
+export const PILL_TOP_INSET = 8;
+export const PILL_BOTTOM_INSET = 8;
 
 export interface Size {
   readonly width: number;

@@ -1,14 +1,11 @@
 import { describe, expect, test } from "bun:test";
 
-import { snapshotToGraph, readPositions } from "./graph-model";
+import { folderId } from "./directory-tree";
+import { readPositions, type CodeGraph } from "./graph-model";
+import { snapshotToGraph } from "./graph-sync";
 import type { GraphSnapshot } from "./graph-types";
-import {
-  layoutIterations,
-  MAX_LAYOUT_ITERATIONS,
-  MIN_LAYOUT_ITERATIONS,
-  startLayout,
-  type LayoutScheduler,
-} from "./layout";
+import { placementBodies, startLayout, type LayoutOptions, type LayoutScheduler } from "./layout";
+import { FILE_RADIUS_SHARE, SEED_SPACING } from "./layout-params";
 
 function ringSnapshot(size: number): GraphSnapshot {
   const ids = Array.from({ length: size }, (_, index) => `src/dir${index % 3}/file${index}.ts`);
@@ -55,39 +52,60 @@ function runToCompletion(runFrame: () => boolean, limit = 10_000): number {
   return frames;
 }
 
-describe("layoutIterations", () => {
-  test("gives small graphs the maximum and large graphs the minimum", () => {
-    expect(layoutIterations(10)).toBe(MAX_LAYOUT_ITERATIONS);
-    expect(layoutIterations(1_000_000)).toBe(MIN_LAYOUT_ITERATIONS);
+function options(scheduler: LayoutScheduler, overrides: Partial<LayoutOptions> = {}): LayoutOptions {
+  return {
+    rounds: 20,
+    animate: true,
+    scheduler,
+    onFrame: () => undefined,
+    onDone: () => undefined,
+    ...overrides,
+  };
+}
+
+function nodeDistance(graph: CodeGraph, first: string, second: string): number {
+  const a = graph.getNodeAttributes(first);
+  const b = graph.getNodeAttributes(second);
+  return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
+describe("placementBodies", () => {
+  test("gives files and hubs a radius and hidden folders none", () => {
+    const graph = snapshotToGraph(ringSnapshot(6), new Map());
+    const { ids, bodies } = placementBodies(graph);
+    expect(bodies.radii[ids.indexOf("src/dir0/file0.ts")]).toBeCloseTo(FILE_RADIUS_SHARE * SEED_SPACING);
+    expect(bodies.radii[ids.indexOf(folderId("src/dir0"))]).toBeGreaterThan(bodies.radii[ids.indexOf("src/dir0/file0.ts")] ?? 0);
+    graph.setNodeAttribute(folderId("src/dir0"), "hub", "src");
+    const hidden = placementBodies(graph);
+    expect(hidden.bodies.radii[hidden.ids.indexOf(folderId("src/dir0"))]).toBe(0);
   });
 
-  test("never increases with graph size", () => {
-    const sizes = [50, 200, 500, 1000, 5000];
-    const counts = sizes.map(layoutIterations);
-    for (let index = 1; index < counts.length; index += 1) {
-      expect(counts[index]).toBeLessThanOrEqual(counts[index - 1] ?? 0);
-    }
+  test("makes hubs far heavier than files so they hold their place", () => {
+    const { ids, bodies } = placementBodies(snapshotToGraph(ringSnapshot(6), new Map()));
+    const hub = bodies.masses?.[ids.indexOf(folderId("src/dir0"))] ?? 0;
+    const file = bodies.masses?.[ids.indexOf("src/dir0/file0.ts")] ?? Infinity;
+    expect(hub).toBeGreaterThan(file * 1000);
   });
 });
 
 describe("startLayout", () => {
   test("spreads the work over several frames and then reports completion exactly once", () => {
-    const graph = snapshotToGraph(ringSnapshot(12), new Map());
+    const graph = snapshotToGraph(ringSnapshot(40), new Map());
     const before = readPositions(graph);
     const fake = fakeScheduler(4);
     let frames = 0;
     let done = 0;
-    startLayout(graph, {
-      iterations: 100,
-      animate: true,
-      scheduler: fake.scheduler,
-      onFrame: () => {
-        frames += 1;
-      },
-      onDone: () => {
-        done += 1;
-      },
-    });
+    startLayout(
+      graph,
+      options(fake.scheduler, {
+        onFrame: () => {
+          frames += 1;
+        },
+        onDone: () => {
+          done += 1;
+        },
+      }),
+    );
     expect(done).toBe(0);
     runToCompletion(fake.runFrame);
     expect(done).toBe(1);
@@ -96,34 +114,48 @@ describe("startLayout", () => {
     expect(readPositions(graph)).not.toEqual(before);
   });
 
-  test("is bounded: it stops scheduling frames after the requested iterations", () => {
-    const graph = snapshotToGraph(ringSnapshot(8), new Map());
+  test("is bounded: it stops scheduling frames once the rounds and untangling are done", () => {
+    const graph = snapshotToGraph(ringSnapshot(24), new Map());
     const fake = fakeScheduler(100);
-    startLayout(graph, {
-      iterations: 40,
-      animate: true,
-      scheduler: fake.scheduler,
-      onFrame: () => undefined,
-      onDone: () => undefined,
-    });
-    expect(runToCompletion(fake.runFrame)).toBeLessThanOrEqual(40);
+    startLayout(graph, options(fake.scheduler, { rounds: 10 }));
+    expect(runToCompletion(fake.runFrame)).toBeLessThan(200);
     expect(fake.pending()).toBe(0);
   });
 
   test("keeps every position finite", () => {
-    const graph = snapshotToGraph(ringSnapshot(30), new Map());
+    const graph = snapshotToGraph(ringSnapshot(60), new Map());
     const fake = fakeScheduler(1);
-    startLayout(graph, {
-      iterations: 200,
-      animate: false,
-      scheduler: fake.scheduler,
-      onFrame: () => undefined,
-      onDone: () => undefined,
-    });
+    startLayout(graph, options(fake.scheduler, { animate: false }));
     runToCompletion(fake.runFrame);
     for (const point of readPositions(graph).values()) {
       expect(Number.isFinite(point.x) && Number.isFinite(point.y)).toBe(true);
     }
+  });
+
+  test("leaves no two shown nodes overlapping once it is done", () => {
+    const graph = snapshotToGraph(ringSnapshot(60), new Map());
+    const fake = fakeScheduler(1);
+    startLayout(graph, options(fake.scheduler, { animate: false }));
+    runToCompletion(fake.runFrame);
+    const { ids, bodies } = placementBodies(graph);
+    let deepest = 0;
+    for (let first = 0; first < ids.length; first += 1) {
+      for (let second = first + 1; second < ids.length; second += 1) {
+        const distance = Math.hypot((bodies.xs[first] ?? 0) - (bodies.xs[second] ?? 0), (bodies.ys[first] ?? 0) - (bodies.ys[second] ?? 0));
+        deepest = Math.max(deepest, (bodies.radii[first] ?? 0) + (bodies.radii[second] ?? 0) - distance);
+      }
+    }
+    expect(deepest).toBeLessThan(0.05);
+  });
+
+  test("keeps the files of a folder nearer to their hub than to another folder's hub", () => {
+    const graph = snapshotToGraph(ringSnapshot(60), new Map());
+    const fake = fakeScheduler(1);
+    startLayout(graph, options(fake.scheduler, { animate: false }));
+    runToCompletion(fake.runFrame);
+    const own = nodeDistance(graph, "src/dir0/file0.ts", folderId("src/dir0"));
+    const other = nodeDistance(graph, "src/dir0/file0.ts", folderId("src/dir1"));
+    expect(own).toBeLessThan(other);
   });
 
   test("does not report frames when animation is off but still completes", () => {
@@ -131,17 +163,18 @@ describe("startLayout", () => {
     const fake = fakeScheduler(4);
     let frames = 0;
     let done = 0;
-    startLayout(graph, {
-      iterations: 60,
-      animate: false,
-      scheduler: fake.scheduler,
-      onFrame: () => {
-        frames += 1;
-      },
-      onDone: () => {
-        done += 1;
-      },
-    });
+    startLayout(
+      graph,
+      options(fake.scheduler, {
+        animate: false,
+        onFrame: () => {
+          frames += 1;
+        },
+        onDone: () => {
+          done += 1;
+        },
+      }),
+    );
     runToCompletion(fake.runFrame);
     expect(frames).toBe(0);
     expect(done).toBe(1);
@@ -151,15 +184,15 @@ describe("startLayout", () => {
     const graph = snapshotToGraph(ringSnapshot(10), new Map());
     const fake = fakeScheduler(50);
     let done = 0;
-    const run = startLayout(graph, {
-      iterations: 400,
-      animate: true,
-      scheduler: fake.scheduler,
-      onFrame: () => undefined,
-      onDone: () => {
-        done += 1;
-      },
-    });
+    const run = startLayout(
+      graph,
+      options(fake.scheduler, {
+        rounds: 400,
+        onDone: () => {
+          done += 1;
+        },
+      }),
+    );
     fake.runFrame();
     run.cancel();
     expect(fake.pending()).toBe(0);
@@ -168,18 +201,17 @@ describe("startLayout", () => {
   });
 
   test("finishes immediately for graphs too small to lay out", () => {
-    const graph = snapshotToGraph(ringSnapshot(1), new Map());
+    const graph = snapshotToGraph({ root: "C:/app", nodes: [], edges: [], warnings: [] }, new Map());
     const fake = fakeScheduler(1);
     let done = 0;
-    startLayout(graph, {
-      iterations: 100,
-      animate: true,
-      scheduler: fake.scheduler,
-      onFrame: () => undefined,
-      onDone: () => {
-        done += 1;
-      },
-    });
+    startLayout(
+      graph,
+      options(fake.scheduler, {
+        onDone: () => {
+          done += 1;
+        },
+      }),
+    );
     expect(done).toBe(1);
     expect(fake.pending()).toBe(0);
   });

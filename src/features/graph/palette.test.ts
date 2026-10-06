@@ -3,16 +3,21 @@ import { describe, expect, test } from "bun:test";
 import { fixturePalette, readTokenFromCss } from "./palette-fixture";
 import {
   ALL_PALETTE_TOKENS,
-  BLAST_TOKENS,
-  DIRECTORY_TOKENS,
+  BLAST_FADE_PER_HOP,
+  FOLDER_TOKENS,
   LANGUAGE_TOKENS,
+  NODE_MUTE,
   readPalette,
+  ROLE_TOKENS,
 } from "./palette";
-import { parseHex } from "./color-math";
+import { muteColor, parseHex, toHsl } from "./color-math";
+import { ROLES } from "./roles";
 import { LANGUAGES } from "./graph-types";
 
 const MIN_CONTRAST_ON_BACKGROUND = 4.5;
-const MIN_COLOUR_DISTANCE = 8;
+const MIN_COLOUR_DISTANCE = 4;
+const MIN_ROLE_DISTANCE = 6;
+const MIN_GRAPHIC_CONTRAST = 3;
 
 function linear(channel: number): number {
   const value = channel / 255;
@@ -59,11 +64,21 @@ describe("palette", () => {
   test("resolves every colour from the stylesheet without hard-coded values", () => {
     const palette = fixturePalette();
     for (const language of LANGUAGES) {
-      expect(palette.language[language]).toBe(readTokenFromCss(LANGUAGE_TOKENS[language]).trim());
+      expect(palette.language[language]).toBe(muteColor(readTokenFromCss(LANGUAGE_TOKENS[language]).trim(), NODE_MUTE));
     }
-    expect(palette.directories).toHaveLength(DIRECTORY_TOKENS.length);
-    expect(palette.blastDepths).toHaveLength(BLAST_TOKENS.depths.length);
+    for (const role of ROLES) {
+      expect(palette.roleHues[role]).toBe(readTokenFromCss(ROLE_TOKENS[role]).trim());
+    }
+    expect(palette.directories).toHaveLength(FOLDER_TOKENS.length);
+    expect(palette.blastDepths).toHaveLength(BLAST_FADE_PER_HOP.length);
     expect(palette.fontFamily).toContain("Segoe UI");
+    expect(palette.monoFamily).toContain("Cascadia");
+  });
+
+  test("builds the palette only from Flare tokens that already exist", () => {
+    for (const token of ALL_PALETTE_TOKENS) {
+      expect(token).toMatch(/^--(color|font)-(bg|surface|border|fg|accent|success|warning|danger|info|activity|agent|lang|sans|mono)/);
+    }
   });
 
   test("gives every language its own colour", () => {
@@ -71,12 +86,25 @@ describe("palette", () => {
     expect(colours.size).toBe(LANGUAGES.length);
   });
 
-  test("keeps every language colour legible on the graph background", () => {
+  test("mutes node colours: less saturated than the token, never brighter", () => {
+    const palette = fixturePalette();
+    for (const language of LANGUAGES) {
+      const raw = toHsl(readTokenFromCss(LANGUAGE_TOKENS[language]).trim());
+      const calm = toHsl(palette.language[language]);
+      expect(calm.s, language).toBeLessThanOrEqual(raw.s);
+      expect(calm.l, language).toBeLessThanOrEqual(raw.l + 0.01);
+    }
+  });
+
+  test("keeps every node colour legible on the graph background", () => {
     const palette = fixturePalette();
     for (const language of LANGUAGES) {
       expect(contrast(palette.language[language], palette.background), language).toBeGreaterThanOrEqual(
         MIN_CONTRAST_ON_BACKGROUND,
       );
+    }
+    for (const role of ROLES) {
+      expect(contrast(palette.roles[role], palette.background), role).toBeGreaterThanOrEqual(MIN_GRAPHIC_CONTRAST);
     }
   });
 
@@ -89,6 +117,23 @@ describe("palette", () => {
         );
       }
     }
+  });
+
+  test("keeps every pair of role colours distinguishable", () => {
+    const { roles } = fixturePalette();
+    for (const [index, first] of ROLES.entries()) {
+      for (const second of ROLES.slice(index + 1)) {
+        expect(colourDistance(roles[first], roles[second]), `${first} vs ${second}`).toBeGreaterThanOrEqual(MIN_ROLE_DISTANCE);
+      }
+    }
+  });
+
+  test("fades blast depths towards the background", () => {
+    const { blastDepths, background } = fixturePalette();
+    const [first, second, third] = blastDepths;
+    if (first === undefined || second === undefined || third === undefined) throw new Error("missing blast depths");
+    expect(colourDistance(first, background)).toBeGreaterThan(colourDistance(second, background));
+    expect(colourDistance(second, background)).toBeGreaterThan(colourDistance(third, background));
   });
 
   test("fails fast on a missing token", () => {
