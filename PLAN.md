@@ -106,7 +106,12 @@ Flare/
   - SQLite thread persistence (threads and transcripts survive restarts).
   - Worktrees: run a thread in its own git worktree.
   - EXTREME-style motion: agent status sprites, frame glow while working.
-- [ ] Markdown rendering for assistant messages.
+- [x] Markdown rendering for assistant messages (streaming-safe, GFM, Monaco-coloured code, file refs open at line, links via opener).
+- [x] Blast-radius toggle applies to the selected file; button audit of ~50 controls.
+- [x] Graph edges: one line per file pair, one arc per neighbour, zoom-independent line width, folder links only in overview.
+- [ ] Turn-strip replay silently does nothing while the file has unsaved edits.
+- [ ] Diff view has no close control when no file tabs are open.
+- [ ] Remove the now-unused `graph_blast_radius` command and `blast.rs`.
 - [ ] Dedicated cards for `AskUserQuestion` and `ExitPlanMode` (today generic approval cards).
 - [ ] Clickable links in the terminal (`tauri-plugin-opener`), right-click paste.
 - [ ] Force a full page reload when `src/features/agent/` changes in dev (module-level store survives HMR).
