@@ -8,6 +8,23 @@ const LANGUAGE_LABELS: Record<Language, string> = {
   javascript: "JavaScript",
   rust: "Rust",
   python: "Python",
+  lua: "Lua",
+  luau: "Luau",
+  go: "Go",
+  c: "C",
+  cpp: "C++",
+  csharp: "C#",
+  java: "Java",
+  kotlin: "Kotlin",
+  ruby: "Ruby",
+  php: "PHP",
+  swift: "Swift",
+  dart: "Dart",
+  zig: "Zig",
+  shell: "Shell",
+  css: "CSS",
+  vue: "Vue",
+  svelte: "Svelte",
 };
 
 const BLAST_LEGEND = [

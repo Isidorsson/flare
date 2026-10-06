@@ -19,10 +19,11 @@ pub(super) fn resolve(from: &str, specifier: &str, ctx: &ResolveContext<'_>) -> 
         let base = paths::join(paths::parent(from), specifier)?;
         return probe(&base, ctx.has_file);
     }
-    ctx.aliases
+    ctx.config
+        .aliases
         .candidates(from, specifier)
         .into_iter()
-        .chain(ctx.packages.candidates(specifier))
+        .chain(ctx.config.packages.candidates(specifier))
         .find_map(|base| probe(&base, ctx.has_file))
 }
 
@@ -70,23 +71,22 @@ fn candidates(base: &str) -> Vec<String> {
 mod tests {
     use std::collections::HashSet;
 
-    use crate::graph::resolve::tsconfig::AliasScopes;
-    use crate::graph::resolve::workspace_packages::WorkspacePackages;
+    use crate::graph::resolve::{Declarations, ProjectConfig};
 
     use super::*;
 
     fn resolve_in(files: &[&str], from: &str, specifier: &str) -> Option<String> {
         let set: HashSet<String> = files.iter().map(ToString::to_string).collect();
         let has_file = |path: &str| set.contains(path);
-        let aliases = AliasScopes::default();
-        let packages = WorkspacePackages::default();
+        let config = ProjectConfig::default();
+        let declared = Declarations::default();
         resolve(
             from,
             specifier,
             &ResolveContext {
                 has_file: &has_file,
-                aliases: &aliases,
-                packages: &packages,
+                config: &config,
+                declared: &declared,
             },
         )
     }

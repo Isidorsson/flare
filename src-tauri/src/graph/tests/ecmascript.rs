@@ -13,7 +13,7 @@ fn app_fixture() -> Fixture {
         ("tsconfig.json", TSCONFIG_WITH_COMMENTS),
         (
             "src/main.tsx",
-            "import React from 'react';\nimport { App } from '@/features/app/App';\nimport './styles.css';\n",
+            "import React from 'react';\nimport { App } from '@/features/app/App';\nimport './styles.css';\nimport logo from './logo.svg';\n",
         ),
         (
             "src/features/app/App.tsx",
@@ -24,6 +24,7 @@ fn app_fixture() -> Fixture {
         ("src/features/lazy/index.ts", "export * from './impl';\n"),
         ("src/features/lazy/impl.ts", "export const impl = 1;\n"),
         ("src/styles.css", "body {}"),
+        ("src/logo.svg", "<svg/>"),
     ])
 }
 
@@ -39,15 +40,16 @@ fn builds_edges_for_relative_alias_dynamic_and_reexport_imports() {
             pair("src/features/app/Panel.tsx", "src/shared/util.ts"),
             pair("src/features/lazy/index.ts", "src/features/lazy/impl.ts"),
             pair("src/main.tsx", "src/features/app/App.tsx"),
+            pair("src/main.tsx", "src/styles.css"),
         ]
     );
 }
 
 #[test]
-fn packages_and_asset_imports_create_no_edges() {
+fn packages_and_unindexed_assets_create_no_edges_but_stylesheets_do() {
     let indexer = app_fixture().index();
     let targets = imports_of(&indexer, "src/main.tsx");
-    assert_eq!(targets, ["src/features/app/App.tsx"]);
+    assert_eq!(targets, ["src/features/app/App.tsx", "src/styles.css"]);
 }
 
 #[test]

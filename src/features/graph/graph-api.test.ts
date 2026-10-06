@@ -63,7 +63,7 @@ describe("graph api", () => {
   });
 
   test("rejects a snapshot that does not match the schema instead of trusting it", async () => {
-    const { invoke } = fakeInvoke({ root: "C:/app", nodes: [{ id: "a.go", language: "go" }], edges: [], warnings: [] });
+    const { invoke } = fakeInvoke({ root: "C:/app", nodes: [{ id: "a.cob", language: "cobol" }], edges: [], warnings: [] });
     expect(await rejection(createGraphApi(invoke).build("C:/app"))).toBeInstanceOf(Error);
   });
 

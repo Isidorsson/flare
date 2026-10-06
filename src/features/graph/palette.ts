@@ -1,11 +1,28 @@
 import { parseHex } from "./color-math";
-import type { Language } from "./graph-types";
+import { LANGUAGES, type Language } from "./graph-types";
 
 export const LANGUAGE_TOKENS = {
   typescript: "--color-info",
   javascript: "--color-warning",
   rust: "--color-danger",
   python: "--color-success",
+  lua: "--color-lang-lua",
+  luau: "--color-lang-luau",
+  go: "--color-lang-go",
+  c: "--color-lang-c",
+  cpp: "--color-lang-cpp",
+  csharp: "--color-lang-csharp",
+  java: "--color-lang-java",
+  kotlin: "--color-lang-kotlin",
+  ruby: "--color-lang-ruby",
+  php: "--color-lang-php",
+  swift: "--color-lang-swift",
+  dart: "--color-lang-dart",
+  zig: "--color-lang-zig",
+  shell: "--color-lang-shell",
+  css: "--color-lang-css",
+  vue: "--color-lang-vue",
+  svelte: "--color-lang-svelte",
 } as const satisfies Record<Language, string>;
 
 export const DIRECTORY_TOKENS = [
@@ -70,6 +87,14 @@ function color(read: ReadToken, name: string): string {
   return value;
 }
 
+function languageColors(pick: (token: string) => string): Record<Language, string> {
+  const colors: Record<Language, string> = { ...LANGUAGE_TOKENS };
+  for (const language of LANGUAGES) {
+    colors[language] = pick(LANGUAGE_TOKENS[language]);
+  }
+  return colors;
+}
+
 export function readPalette(read: ReadToken): Palette {
   const pick = (name: string) => color(read, name);
   const font = read(FONT_TOKEN).trim();
@@ -77,12 +102,7 @@ export function readPalette(read: ReadToken): Palette {
     throw new Error(`design token ${FONT_TOKEN} is not defined`);
   }
   return {
-    language: {
-      typescript: pick(LANGUAGE_TOKENS.typescript),
-      javascript: pick(LANGUAGE_TOKENS.javascript),
-      rust: pick(LANGUAGE_TOKENS.rust),
-      python: pick(LANGUAGE_TOKENS.python),
-    },
+    language: languageColors(pick),
     directories: DIRECTORY_TOKENS.map(pick),
     pulse: { read: pick(PULSE_TOKENS.read), change: pick(PULSE_TOKENS.change) },
     blastOrigin: pick(BLAST_TOKENS.origin),

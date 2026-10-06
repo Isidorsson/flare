@@ -1,6 +1,28 @@
 import { z } from "zod";
 
-export const languageSchema = z.enum(["typescript", "javascript", "rust", "python"]);
+export const languageSchema = z.enum([
+  "typescript",
+  "javascript",
+  "rust",
+  "python",
+  "lua",
+  "luau",
+  "go",
+  "c",
+  "cpp",
+  "csharp",
+  "java",
+  "kotlin",
+  "ruby",
+  "php",
+  "swift",
+  "dart",
+  "zig",
+  "shell",
+  "css",
+  "vue",
+  "svelte",
+]);
 
 export const graphSnapshotSchema = z.object({
   root: z.string(),

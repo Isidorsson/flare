@@ -7,6 +7,23 @@ pub enum Language {
     JavaScript,
     Rust,
     Python,
+    Lua,
+    Luau,
+    Go,
+    C,
+    Cpp,
+    CSharp,
+    Java,
+    Kotlin,
+    Ruby,
+    Php,
+    Swift,
+    Dart,
+    Zig,
+    Shell,
+    Css,
+    Vue,
+    Svelte,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -61,6 +78,11 @@ mod tests {
             serde_json::to_string(&Language::TypeScript).unwrap(),
             "\"typescript\""
         );
+        assert_eq!(
+            serde_json::to_string(&Language::CSharp).unwrap(),
+            "\"csharp\""
+        );
+        assert_eq!(serde_json::to_string(&Language::Cpp).unwrap(), "\"cpp\"");
         assert_eq!(
             serde_json::to_string(&Change::Rebuilt).unwrap(),
             "\"rebuilt\""

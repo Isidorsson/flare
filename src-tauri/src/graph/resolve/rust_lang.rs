@@ -12,7 +12,7 @@ pub(super) fn resolve(from: &str, import: &RawImport, has_file: HasFile<'_>) -> 
     match import {
         RawImport::RustMod { name, inline } => resolve_mod(from, name, inline, has_file),
         RawImport::RustUse { path, inline } => resolve_use(from, path, inline, has_file),
-        RawImport::Module { .. } | RawImport::Python { .. } => None,
+        _ => None,
     }
 }
 

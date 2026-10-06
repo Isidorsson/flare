@@ -6,13 +6,13 @@ use rayon::prelude::*;
 
 use super::blast::{self, Adjacency};
 use super::error::GraphError;
-use super::extract::{Extractor, RawImport};
+use super::extract::{Declared, Extractor, RawImport};
 use super::lang::SourceKind;
 use super::model::{BlastRadius, Change, GraphEdge, GraphNode, GraphSnapshot};
 use super::paths;
-use super::resolve::tsconfig::{self, AliasScopes};
-use super::resolve::workspace_packages::WorkspacePackages;
-use super::resolve::{is_resolution_config, resolve_import, ResolveContext};
+use super::resolve::{
+    is_resolution_config, resolve_import, Declarations, DeclaredFile, ProjectConfig, ResolveContext,
+};
 use super::walk::{self, IgnoreRules, SourceFile, GITIGNORE_FILE};
 
 pub const MAX_SOURCE_BYTES: u64 = 1024 * 1024;
@@ -22,6 +22,7 @@ const MAX_WARNINGS: usize = 50;
 struct FileEntry {
     kind: SourceKind,
     imports: Vec<RawImport>,
+    declared: Vec<Declared>,
 }
 
 type Files = BTreeMap<String, FileEntry>;
@@ -32,7 +33,8 @@ pub struct Indexer {
     given_root: Option<String>,
     files: Files,
     config_files: BTreeSet<String>,
-    resolution: Resolution,
+    config: ProjectConfig,
+    declared: Declarations,
     edges: Adjacency,
     ignore: IgnoreRules,
     build_warnings: Vec<String>,
@@ -60,8 +62,9 @@ impl Indexer {
             }
         }
         let config_files: BTreeSet<String> = scan.configs.into_iter().collect();
-        let resolution = Resolution::load(&root_path, &config_files);
-        let edges = compute_edges(&files, &resolution);
+        let config = ProjectConfig::load(&root_path, &config_files);
+        let declared = build_declarations(&files);
+        let edges = compute_edges(&files, &config, &declared);
         let given = paths::normalize_separators(&root.to_string_lossy());
         Ok(Self {
             ignore: IgnoreRules::new(&root_path),
@@ -70,7 +73,8 @@ impl Indexer {
             given_root: paths::is_absolute(&given).then_some(given),
             files,
             config_files,
-            resolution,
+            config,
+            declared,
             edges,
             build_warnings,
         })
@@ -144,7 +148,7 @@ impl Indexer {
         self.config_files
             .retain(|known| *known != rel && !known.starts_with(&folder));
         if self.config_files.len() != configs_before {
-            self.reload_resolution();
+            self.reload_config();
         }
         if removed_source || self.config_files.len() != configs_before {
             self.recompute_edges();
@@ -158,16 +162,29 @@ impl Indexer {
 
     fn update_source(&mut self, rel: String, kind: SourceKind) -> Result<Change, GraphError> {
         let key = self.canonical_key(rel);
-        let imports = Extractor::new().extract(kind, &key, &read_source(&self.root, &key)?)?;
-        let existed = self
+        let extraction = Extractor::new().extract(kind, &key, &read_source(&self.root, &key)?)?;
+        let declared_changed = self
             .files
-            .insert(key.clone(), FileEntry { kind, imports })
-            .is_some();
+            .get(&key)
+            .is_some_and(|known| known.declared != extraction.declared);
+        let entry = FileEntry {
+            kind,
+            imports: extraction.imports,
+            declared: extraction.declared,
+        };
+        let existed = self.files.insert(key.clone(), entry).is_some();
         if !existed {
             self.recompute_edges();
             return Ok(Change::Added);
         }
-        let targets = targets_of(&key, &self.files, &self.resolution);
+        if declared_changed {
+            return Ok(if self.recompute_edges() {
+                Change::Updated
+            } else {
+                Change::Unchanged
+            });
+        }
+        let targets = targets_of(&key, &self.files, &self.config, &self.declared);
         let before = self.edges.get(&key);
         if (before.is_none() && targets.is_empty()) || before == Some(&targets) {
             return Ok(Change::Unchanged);
@@ -182,7 +199,7 @@ impl Indexer {
 
     fn update_config(&mut self, rel: String) -> Change {
         self.config_files.insert(rel);
-        self.reload_resolution();
+        self.reload_config();
         if self.recompute_edges() {
             Change::Updated
         } else {
@@ -199,12 +216,13 @@ impl Indexer {
         Ok(())
     }
 
-    fn reload_resolution(&mut self) {
-        self.resolution = Resolution::load(&self.root, &self.config_files);
+    fn reload_config(&mut self) {
+        self.config = ProjectConfig::load(&self.root, &self.config_files);
     }
 
     fn recompute_edges(&mut self) -> bool {
-        let edges = compute_edges(&self.files, &self.resolution);
+        self.declared = build_declarations(&self.files);
+        let edges = compute_edges(&self.files, &self.config, &self.declared);
         let changed = edges != self.edges;
         self.edges = edges;
         changed
@@ -241,7 +259,7 @@ impl Indexer {
         let all: Vec<&String> = self
             .build_warnings
             .iter()
-            .chain(&self.resolution.warnings)
+            .chain(&self.config.warnings)
             .chain(self.ignore.warnings())
             .collect();
         let mut shown: Vec<String> = all
@@ -284,59 +302,49 @@ fn parse_file(
     extractor: &mut Extractor,
 ) -> Result<FileEntry, GraphError> {
     let source = read_source(root, &file.path)?;
-    let imports = extractor.extract(file.kind, &file.path, &source)?;
+    let extraction = extractor.extract(file.kind, &file.path, &source)?;
     Ok(FileEntry {
         kind: file.kind,
-        imports,
+        imports: extraction.imports,
+        declared: extraction.declared,
     })
 }
 
-#[derive(Default)]
-struct Resolution {
-    aliases: AliasScopes,
-    packages: WorkspacePackages,
-    warnings: Vec<String>,
+fn build_declarations(files: &Files) -> Declarations {
+    Declarations::build(files.iter().map(|(path, entry)| DeclaredFile {
+        path,
+        kind: entry.kind,
+        declared: &entry.declared,
+    }))
 }
 
-impl Resolution {
-    fn load(root: &Path, config_files: &BTreeSet<String>) -> Self {
-        let (tsconfigs, manifests): (Vec<String>, Vec<String>) = config_files
-            .iter()
-            .cloned()
-            .partition(|file| tsconfig::is_config_file(file));
-        let (aliases, mut warnings) = AliasScopes::load(root, &tsconfigs);
-        let (packages, package_warnings) = WorkspacePackages::load(root, &manifests);
-        warnings.extend(package_warnings);
-        Self {
-            aliases,
-            packages,
-            warnings,
-        }
-    }
-}
-
-fn targets_of(path: &str, files: &Files, resolution: &Resolution) -> BTreeSet<String> {
+fn targets_of(
+    path: &str,
+    files: &Files,
+    config: &ProjectConfig,
+    declared: &Declarations,
+) -> BTreeSet<String> {
     let Some(entry) = files.get(path) else {
         return BTreeSet::new();
     };
     let has_file = |candidate: &str| files.contains_key(candidate);
     let ctx = ResolveContext {
         has_file: &has_file,
-        aliases: &resolution.aliases,
-        packages: &resolution.packages,
+        config,
+        declared,
     };
     entry
         .imports
         .iter()
-        .flat_map(|import| resolve_import(path, import, &ctx))
+        .flat_map(|import| resolve_import(path, entry.kind, import, &ctx))
         .collect()
 }
 
-fn compute_edges(files: &Files, resolution: &Resolution) -> Adjacency {
+fn compute_edges(files: &Files, config: &ProjectConfig, declared: &Declarations) -> Adjacency {
     files
         .par_iter()
         .filter_map(|(path, _)| {
-            let targets = targets_of(path, files, resolution);
+            let targets = targets_of(path, files, config, declared);
             (!targets.is_empty()).then(|| (path.clone(), targets))
         })
         .collect()

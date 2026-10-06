@@ -9,7 +9,7 @@ use super::paths;
 use super::resolve::is_resolution_config;
 
 pub const GITIGNORE_FILE: &str = ".gitignore";
-const SKIPPED_DIRS: [&str; 3] = ["node_modules", "__pycache__", "site-packages"];
+const SKIPPED_DIRS: [&str; 4] = ["node_modules", "__pycache__", "site-packages", "vendor"];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SourceFile {
@@ -168,7 +168,7 @@ mod tests {
         scan.sources.iter().map(|file| file.path.as_str()).collect()
     }
 
-    const TREE: [(&str, &str); 11] = [
+    const TREE: [(&str, &str); 12] = [
         (".gitignore", "dist/\n*.generated.ts\n!keep.generated.ts\n"),
         ("src/a.ts", ""),
         ("src/b.py", ""),
@@ -177,6 +177,7 @@ mod tests {
         ("src/keep.generated.ts", ""),
         ("dist/out.js", ""),
         ("node_modules/pkg/index.js", ""),
+        ("vendor/dep/dep.go", ""),
         (".hidden/secret.ts", ""),
         ("pkg/.gitignore", "local.ts\n"),
         ("pkg/local.ts", ""),
@@ -222,6 +223,53 @@ mod tests {
     }
 
     #[test]
+    fn scan_collects_language_resolution_configs_but_not_lockfiles() {
+        let dir = fixture(&[
+            ("go.mod", ""),
+            ("go.sum", ""),
+            ("svc/go.mod", ""),
+            ("composer.json", "{}"),
+            ("composer.lock", "{}"),
+            ("app/pubspec.yaml", ""),
+            ("app/pubspec.lock", ""),
+            ("vendor/dep/go.mod", ""),
+            ("vendor/dep/composer.json", "{}"),
+        ]);
+        assert_eq!(
+            scan(dir.path()).configs,
+            ["app/pubspec.yaml", "composer.json", "go.mod", "svc/go.mod"]
+        );
+    }
+
+    #[test]
+    fn scan_classifies_every_supported_extension_as_a_source() {
+        let dir = fixture(&[
+            ("a.lua", ""),
+            ("a.luau", ""),
+            ("a.go", ""),
+            ("a.h", ""),
+            ("a.cpp", ""),
+            ("a.cs", ""),
+            ("a.java", ""),
+            ("a.kt", ""),
+            ("a.rb", ""),
+            ("a.php", ""),
+            ("a.swift", ""),
+            ("a.dart", ""),
+            ("a.zig", ""),
+            ("a.sh", ""),
+            ("a.scss", ""),
+            ("a.vue", ""),
+            ("a.svelte", ""),
+            ("a.txt", ""),
+            ("a.md", ""),
+        ]);
+        let result = scan(dir.path());
+        assert_eq!(result.sources.len(), 17);
+        assert!(result.warnings.is_empty(), "{:?}", result.warnings);
+    }
+
+    #[test]
     fn scan_works_without_a_git_repository() {
         let dir = fixture(&[
             (".gitignore", "ignored.ts\n"),
@@ -260,6 +308,7 @@ mod tests {
         assert!(rules.is_ignored("pkg/local.ts"));
         assert!(!rules.is_ignored("local.ts"));
         assert!(rules.is_ignored("node_modules/pkg/index.js"));
+        assert!(rules.is_ignored("vendor/dep/dep.go"));
         assert!(rules.is_ignored(".hidden/secret.ts"));
         assert!(!rules.is_ignored("src/a.ts"));
     }
