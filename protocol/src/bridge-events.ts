@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { FILE_CHANGE_KINDS } from "./constants";
+import { FILE_CHANGE_KINDS, FILE_EDITING_KINDS, MAX_EDITING_TEXT_CHARS, MAX_MATCH_LINES } from "./constants";
 
 const nonEmpty = z.string().min(1);
 const tokenCount = z.number().int().nonnegative();
@@ -49,11 +49,49 @@ export const toolFinishedSchema = z.object({
   summary: z.string(),
 });
 
-export const fileReadSchema = z.object({
-  type: z.literal("file.read"),
-  toolUseId: nonEmpty,
-  path: nonEmpty,
+const lineNumber = z.number().int().positive();
+
+export const lineRangeSchema = z
+  .object({ start: lineNumber, end: lineNumber })
+  .refine((range) => range.end >= range.start, { message: "range.end must not precede range.start" });
+
+export const turnStartedSchema = z.object({
+  type: z.literal("turn.started"),
 });
+
+export const fileReadSchema = z
+  .object({
+    type: z.literal("file.read"),
+    toolUseId: nonEmpty,
+    path: nonEmpty,
+    // 1-based lines the Read tool was asked for.
+    range: lineRangeSchema.optional(),
+    // A search of this single file and the 1-based lines that matched.
+    pattern: nonEmpty.optional(),
+    matchLines: z.array(lineNumber).max(MAX_MATCH_LINES).optional(),
+  })
+  .refine((read) => read.matchLines === undefined || read.pattern !== undefined, {
+    message: "matchLines requires a pattern",
+  })
+  .refine((read) => read.range === undefined || read.pattern === undefined, {
+    message: "a read has either a range or a pattern",
+  });
+
+// The edit the model is still typing, so the UI can show it before the tool runs.
+export const fileEditingSchema = z
+  .object({
+    type: z.literal("file.editing"),
+    toolUseId: nonEmpty,
+    path: nonEmpty,
+    kind: z.enum(FILE_EDITING_KINDS),
+    // The text an edit replaces; absent for a whole-file write.
+    oldString: z.string().optional(),
+    // Everything typed so far into the replacement (or the whole file for a write).
+    text: z.string().max(MAX_EDITING_TEXT_CHARS),
+  })
+  .refine((editing) => editing.kind === "edit" || editing.oldString === undefined, {
+    message: "only an edit has an oldString",
+  });
 
 export const fileChangeSchema = z.object({
   type: z.literal("file.change"),
@@ -93,8 +131,10 @@ export const bridgeEventSchema = z.discriminatedUnion("type", [
   toolStartedSchema,
   toolFinishedSchema,
   fileReadSchema,
+  fileEditingSchema,
   fileChangeSchema,
   permissionRequestSchema,
+  turnStartedSchema,
   turnCompletedSchema,
   errorSchema,
 ]);
@@ -102,5 +142,7 @@ export const bridgeEventSchema = z.discriminatedUnion("type", [
 export type ToolInput = z.infer<typeof toolInputSchema>;
 export type Usage = z.infer<typeof usageSchema>;
 export type FileChangeKind = z.infer<typeof fileChangeSchema>["kind"];
+export type FileEditingKind = z.infer<typeof fileEditingSchema>["kind"];
+export type LineRange = z.infer<typeof lineRangeSchema>;
 export type BridgeEvent = z.infer<typeof bridgeEventSchema>;
 export type BridgeEventOf<T extends BridgeEvent["type"]> = Extract<BridgeEvent, { type: T }>;

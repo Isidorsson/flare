@@ -20,7 +20,8 @@ describe("design tokens", () => {
   test("emit every token as a CSS custom property", async () => {
     const css = await buildUtilities([]);
 
-    for (const token of ["--color-bg", "--color-surface-1", "--color-fg", "--color-accent", "--font-sans"]) {
+    const tokens = ["--color-bg", "--color-surface-1", "--color-fg", "--color-accent", "--color-claude", "--color-read", "--font-sans"];
+    for (const token of tokens) {
       expect(css).toContain(`${token}:`);
     }
   });
@@ -32,6 +33,14 @@ describe("design tokens", () => {
     expect(css).toContain("color: var(--color-fg-muted)");
     expect(css).toContain("border-color: var(--color-border)");
     expect(css).toContain("color: var(--color-accent)");
+  });
+
+  test("give the agent's activity its own colours", async () => {
+    const css = await buildUtilities(["border-claude", "bg-read", "text-claude"]);
+
+    expect(css).toContain("var(--color-claude)");
+    expect(css).toContain("var(--color-read)");
+    expect(tokensCss).toMatch(/--color-claude: #d97757;/);
   });
 
   test("replace Tailwind's default palette", async () => {

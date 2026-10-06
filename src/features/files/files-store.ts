@@ -7,9 +7,9 @@ import type { FsGateway } from "./fs-gateway";
 import { initialTreeState, treeActions } from "./tree-slice";
 import { initialWorkspaceData, workspaceActions } from "./workspace-slice";
 
-export function createFilesStore(gateway: FsGateway) {
+export function createFilesStore(gateway: FsGateway, now: () => number = Date.now) {
   return createStore<FilesState>()((set, get) => {
-    const ctx: StoreContext = { set, get, gateway };
+    const ctx: StoreContext = { set, get, gateway, now };
     return {
       ...initialWorkspaceData(),
       ...initialTreeState(),

@@ -1,4 +1,4 @@
-import { Save } from "lucide-react";
+import { FileDiff, Save } from "lucide-react";
 import { Suspense, lazy, useMemo, type ReactNode } from "react";
 
 import { IconButton } from "@/shared/ui/IconButton";
@@ -10,7 +10,7 @@ import { relativeTo } from "./paths";
 import { groupByTurn } from "./timeline";
 import { useFiles } from "./use-files";
 
-const MonacoFileEditor = lazy(() => import("./MonacoFileEditor").then((m) => ({ default: m.MonacoFileEditor })));
+const LiveEditor = lazy(() => import("./LiveEditor").then((m) => ({ default: m.LiveEditor })));
 const MonacoDiffView = lazy(() => import("./MonacoDiffView").then((m) => ({ default: m.MonacoDiffView })));
 
 const FILE_MESSAGES: Record<Exclude<OpenFile["status"], "ready" | "error">, string> = {
@@ -29,6 +29,8 @@ function EditorFallback() {
 
 function FileHeader({ file, root }: { file: OpenFile; root: string | null }) {
   const saveFile = useFiles((state) => state.saveFile);
+  const showChange = useFiles((state) => state.showChange);
+  const latestChangeId = useFiles((state) => state.changes.findLast((change) => change.path === file.path)?.id);
   const dirty = isDirty(file);
   return (
     <div className="flex h-8 shrink-0 items-center gap-2 border-b border-border px-3 text-xs">
@@ -36,6 +38,15 @@ function FileHeader({ file, root }: { file: OpenFile; root: string | null }) {
         {root === null ? file.path : relativeTo(root, file.path)}
       </span>
       {file.error === null ? null : <span className="shrink-0 text-danger">{file.error}</span>}
+      {latestChangeId === undefined ? null : (
+        <IconButton
+          icon={FileDiff}
+          label="Show the agent's latest change as a diff"
+          onClick={() => {
+            showChange(latestChangeId);
+          }}
+        />
+      )}
       <IconButton
         icon={Save}
         label={file.saving ? "Saving..." : "Save (Ctrl+S)"}
@@ -52,8 +63,6 @@ function FileHeader({ file, root }: { file: OpenFile; root: string | null }) {
 function FilePane({ path }: { path: string }) {
   const file = useFiles((state) => state.files[path]);
   const root = useFiles((state) => state.root);
-  const setDraft = useFiles((state) => state.setDraft);
-  const saveFile = useFiles((state) => state.saveFile);
   if (file === undefined) return null;
   if (file.status === "error") return <PaneMessage tone="error">{file.error}</PaneMessage>;
   if (file.status !== "ready") return <PaneMessage>{FILE_MESSAGES[file.status]}</PaneMessage>;
@@ -64,17 +73,7 @@ function FilePane({ path }: { path: string }) {
       {file.conflict === null ? null : <ConflictBanner path={path} conflict={file.conflict} />}
       <div className="min-h-0 flex-1">
         <Suspense fallback={<EditorFallback />}>
-          <MonacoFileEditor
-            key={path}
-            path={path}
-            value={file.draft}
-            onChange={(content) => {
-              setDraft(path, content);
-            }}
-            onSave={() => {
-              void saveFile(path);
-            }}
-          />
+          <LiveEditor key={path} path={path} />
         </Suspense>
       </div>
     </>

@@ -2,6 +2,7 @@ import type { BridgeEventOf, FileChangeKind } from "@flare/protocol";
 
 import type { FsGateway } from "./fs-gateway";
 import type { DirEntry, WatchBatch } from "./fs-schemas";
+import type { UserActivity } from "./live/follow-guard";
 
 export type AgentChangeKind = FileChangeKind;
 
@@ -67,6 +68,8 @@ export interface BufferSlice {
   tabs: string[];
   active: ActiveView;
   openFile: (path: string, options?: OpenFileOptions) => Promise<void>;
+  // A preview tab for a file the agent is about to create, so there is somewhere to type into.
+  openEmptyPreview: (path: string) => void;
   activateFile: (path: string) => void;
   closeFile: (path: string) => void;
   setDraft: (path: string, content: string) => void;
@@ -84,9 +87,13 @@ export interface AgentSlice {
   follow: boolean;
   pane: SidePane;
   changes: TimelineEntry[];
+  // The turn whose changes the turn strip shows; null until the agent starts one.
+  turnId: string | null;
+  userActivity: UserActivity;
   setFollow: (follow: boolean) => void;
   setPane: (pane: SidePane) => void;
-  applyAgentFileChange: (change: AgentFileChange) => void;
+  startTurn: (turnId: string) => void;
+  applyAgentFileChange: (change: AgentFileChange) => TimelineEntry;
   noteAgentFileRead: (path: string) => Promise<void>;
   showChange: (changeId: string) => void;
 }
@@ -97,6 +104,7 @@ export interface StoreContext {
   set: (partial: Partial<FilesState> | ((state: FilesState) => Partial<FilesState>)) => void;
   get: () => FilesState;
   gateway: FsGateway;
+  now: () => number;
 }
 
 export function isDirty(file: OpenFile): boolean {

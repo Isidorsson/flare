@@ -40,6 +40,8 @@ function applyConversationEvent(thread: Thread, event: Exclude<BridgeEvent, Tool
     case "session.ready":
       return { ...thread, sessionId: event.sessionId };
     case "session.outputStyles":
+    case "turn.started":
+    case "file.editing":
       return thread;
     case "assistant.delta":
       return appendDelta(thread, event.text);

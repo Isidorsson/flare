@@ -1,6 +1,8 @@
 import { ChevronDown, ChevronRight, File, Folder, FolderOpen } from "lucide-react";
 import { useMemo, type KeyboardEvent } from "react";
 
+import type { HeatEntry } from "./live/heat";
+import { useHeatView } from "./live/use-heat";
 import { treeKeyAction } from "./tree-keys";
 import { flattenTree, type TreeRow } from "./tree-rows";
 import { useFiles } from "./use-files";
@@ -13,16 +15,56 @@ type EntryRow = Extract<TreeRow, { type: "entry" }>;
 interface EntryRowViewProps {
   row: EntryRow;
   selected: boolean;
-  touchedByAgent: boolean;
+  heat: HeatEntry | undefined;
+  spark: boolean;
   focusable: boolean;
   onToggle: (path: string) => void;
   onOpen: (path: string, pinned: boolean) => void;
 }
 
-function EntryRowView({ row, selected, touchedByAgent, focusable, onToggle, onOpen }: EntryRowViewProps) {
+function rowTitle(path: string, heat: HeatEntry | undefined): string {
+  if (heat === undefined) return path;
+  return `${path}\n${heat.kind === "edit" ? "Edited" : "Read"} by the agent`;
+}
+
+function rowClassName(selected: boolean, heat: HeatEntry | undefined): string {
+  const base = "relative flex h-6 w-full items-center gap-1.5 pr-2 text-left text-xs transition-colors hover:bg-surface-2";
+  const heated = heat === undefined ? "" : "flare-heat";
+  return `${base} ${heated} ${selected ? "bg-surface-3 text-fg" : "text-fg-muted"}`;
+}
+
+function heatAttributes(heat: HeatEntry | undefined) {
+  return heat === undefined ? {} : { "data-heat": heat.step, "data-heat-kind": heat.kind };
+}
+
+function RowIcon({ row }: { row: EntryRow }) {
+  if (row.entry.kind === "file") return <File aria-hidden className="size-3.5 shrink-0 text-fg-muted" />;
+  const Icon = row.expanded ? FolderOpen : Folder;
+  return <Icon aria-hidden className="size-3.5 shrink-0 text-fg-subtle" />;
+}
+
+function Chevron({ row }: { row: EntryRow }) {
+  if (row.entry.kind === "file") return null;
+  return row.expanded ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />;
+}
+
+/** The number of the file in the order the agent touched them, 1 being the latest. */
+function RecencyBadge({ heat }: { heat: HeatEntry }) {
+  if (heat.badge === null) return null;
+  const tone = heat.kind === "edit" ? "bg-claude" : "bg-read";
+  return (
+    <span
+      aria-label={`Touched by the agent ${String(heat.badge)} ${heat.badge === 1 ? "file" : "files"} ago`}
+      className={`flex size-3.5 shrink-0 items-center justify-center rounded-full text-[9px] leading-none font-semibold text-bg ${tone}`}
+    >
+      {heat.badge}
+    </span>
+  );
+}
+
+function EntryRowView({ row, selected, heat, spark, focusable, onToggle, onOpen }: EntryRowViewProps) {
   const { entry } = row;
   const isDir = entry.kind === "dir";
-  const Icon = isDir ? (row.expanded ? FolderOpen : Folder) : File;
   return (
     <button
       type="button"
@@ -33,7 +75,7 @@ function EntryRowView({ row, selected, touchedByAgent, focusable, onToggle, onOp
       tabIndex={focusable ? 0 : -1}
       data-path={entry.path}
       data-kind={entry.kind}
-      title={entry.path}
+      title={rowTitle(entry.path, heat)}
       style={{ paddingLeft: BASE_PADDING_PX + row.depth * INDENT_PX }}
       onClick={() => {
         if (isDir) onToggle(entry.path);
@@ -42,18 +84,16 @@ function EntryRowView({ row, selected, touchedByAgent, focusable, onToggle, onOp
       onDoubleClick={() => {
         if (!isDir) onOpen(entry.path, true);
       }}
-      className={`flex h-6 w-full items-center gap-1.5 pr-2 text-left text-xs transition-colors hover:bg-surface-2 ${
-        selected ? "bg-surface-3 text-fg" : "text-fg-muted"
-      }`}
+      {...heatAttributes(heat)}
+      className={rowClassName(selected, heat)}
     >
+      {spark ? <span aria-hidden className="flare-spark" /> : null}
       <span aria-hidden className="flex size-3.5 shrink-0 items-center justify-center">
-        {isDir ? (row.expanded ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />) : null}
+        <Chevron row={row} />
       </span>
-      <Icon aria-hidden className={`size-3.5 shrink-0 ${isDir ? "text-fg-subtle" : "text-fg-muted"}`} />
+      <RowIcon row={row} />
       <span className="min-w-0 flex-1 truncate">{entry.name}</span>
-      {touchedByAgent ? (
-        <span role="img" aria-label="Edited by the agent" title="Edited by the agent" className="size-1.5 shrink-0 rounded-full bg-accent" />
-      ) : null}
+      {heat === undefined ? null : <RecencyBadge heat={heat} />}
     </button>
   );
 }
@@ -83,12 +123,11 @@ export function FileTree() {
   const dirs = useFiles((state) => state.dirs);
   const expanded = useFiles((state) => state.expanded);
   const active = useFiles((state) => state.active);
-  const changes = useFiles((state) => state.changes);
   const toggleDir = useFiles((state) => state.toggleDir);
   const openFile = useFiles((state) => state.openFile);
+  const heat = useHeatView();
 
   const rows = useMemo(() => (root === null ? [] : flattenTree(root, dirs, expanded)), [root, dirs, expanded]);
-  const touched = useMemo(() => new Set(changes.map((change) => change.path)), [changes]);
   const activePath = active?.kind === "file" ? active.path : null;
   const firstEntryKey = rows.find((row) => row.type === "entry")?.key;
 
@@ -120,7 +159,8 @@ export function FileTree() {
             key={row.key}
             row={row}
             selected={row.entry.path === activePath}
-            touchedByAgent={touched.has(row.entry.path)}
+            heat={row.entry.kind === "file" ? heat.files.get(row.entry.path) : undefined}
+            spark={row.entry.kind === "dir" && heat.sparks.has(row.entry.path)}
             focusable={row.key === firstEntryKey}
             onToggle={(path) => void toggleDir(path)}
             onOpen={(path, pinned) => void openFile(path, { preview: !pinned })}

@@ -40,7 +40,7 @@ function FollowSwitch() {
       type="button"
       role="switch"
       aria-checked={follow}
-      title="Open every file the agent changes in the diff view"
+      title="Open the files the agent reads and edits and show the work as it happens"
       onClick={() => {
         setFollow(!follow);
       }}

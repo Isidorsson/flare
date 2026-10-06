@@ -1,0 +1,240 @@
+/*
+ * Styles for the agent's live activity in the editor, tabs and file tree.
+ * Colours come from the design tokens; every duration is a custom property
+ * that timing.ts sets on the document, so the numbers live in one place.
+ */
+
+/* A delay of N steps is one class for the ones digit and one for the tens. */
+.flare-su0 { --flare-u: 0; } .flare-su1 { --flare-u: 1; } .flare-su2 { --flare-u: 2; } .flare-su3 { --flare-u: 3; }
+.flare-su4 { --flare-u: 4; } .flare-su5 { --flare-u: 5; } .flare-su6 { --flare-u: 6; } .flare-su7 { --flare-u: 7; }
+.flare-su8 { --flare-u: 8; } .flare-su9 { --flare-u: 9; }
+.flare-st0 { --flare-t: 0; } .flare-st1 { --flare-t: 1; } .flare-st2 { --flare-t: 2; } .flare-st3 { --flare-t: 3; }
+.flare-st4 { --flare-t: 4; } .flare-st5 { --flare-t: 5; } .flare-st6 { --flare-t: 6; } .flare-st7 { --flare-t: 7; }
+.flare-st8 { --flare-t: 8; } .flare-st9 { --flare-t: 9; } .flare-st10 { --flare-t: 10; } .flare-st11 { --flare-t: 11; }
+.flare-st12 { --flare-t: 12; } .flare-st13 { --flare-t: 13; } .flare-st14 { --flare-t: 14; } .flare-st15 { --flare-t: 15; }
+.flare-st16 { --flare-t: 16; } .flare-st17 { --flare-t: 17; } .flare-st18 { --flare-t: 18; } .flare-st19 { --flare-t: 19; }
+.flare-st20 { --flare-t: 20; } .flare-st21 { --flare-t: 21; } .flare-st22 { --flare-t: 22; } .flare-st23 { --flare-t: 23; }
+.flare-st24 { --flare-t: 24; } .flare-st25 { --flare-t: 25; } .flare-st26 { --flare-t: 26; } .flare-st27 { --flare-t: 27; }
+.flare-st28 { --flare-t: 28; } .flare-st29 { --flare-t: 29; }
+
+/* Gutter bars. Monaco sizes these inline, hence the overrides. */
+.flare-bar { width: 3px !important; margin-left: 3px; border-radius: 1px; }
+.flare-bar-read { background: var(--color-read); }
+.flare-bar-add { background: var(--color-success); }
+.flare-mark { width: 2px !important; margin-left: 4px; }
+.flare-mark-add { background: color-mix(in srgb, var(--color-success) 80%, transparent); }
+.flare-mark-removed {
+  width: 8px !important;
+  margin-left: 1px;
+  background: linear-gradient(var(--color-danger), var(--color-danger)) top / 100% 2px no-repeat;
+}
+.flare-mark-removed-end { background-position: bottom; }
+
+/* Reads: a cyan wave that keeps pulsing down the lines. */
+.flare-wave {
+  --flare-delay: calc((var(--flare-u, 0) + 10 * var(--flare-t, 0)) * var(--flare-read-step));
+  background-color: color-mix(in srgb, var(--color-read) 5%, transparent);
+  animation: flare-wave var(--flare-read-wave) ease-in-out infinite;
+  animation-delay: var(--flare-delay);
+}
+@keyframes flare-wave {
+  50% { background-color: color-mix(in srgb, var(--color-read) 22%, transparent); }
+}
+
+/* Edits: green sweeping in left to right, text fading in from a blur, then everything fading away. */
+.flare-add,
+.flare-add-text {
+  --flare-delay: calc((var(--flare-u, 0) + 10 * var(--flare-t, 0)) * var(--flare-add-step));
+}
+.flare-add {
+  background-image: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--color-success) 26%, transparent),
+    color-mix(in srgb, var(--color-success) 8%, transparent)
+  );
+  background-repeat: no-repeat;
+  animation:
+    flare-sweep var(--flare-add-sweep) ease-out backwards,
+    flare-fade var(--flare-add-fade) linear forwards;
+  animation-delay: var(--flare-delay), calc(var(--flare-add-fade-delay) + var(--flare-delay));
+}
+.flare-add-text {
+  animation: flare-text-in var(--flare-add-text) ease-out backwards;
+  animation-delay: var(--flare-delay);
+}
+.flare-fade-out {
+  animation: flare-fade var(--flare-add-fade) linear forwards;
+  animation-delay: var(--flare-add-fade-delay);
+}
+/* An edit that was typed out on screen first has no stagger and fades sooner. */
+.flare-add-settled {
+  animation:
+    flare-sweep var(--flare-add-sweep) ease-out backwards,
+    flare-fade var(--flare-settle-fade) linear forwards;
+  animation-delay: 0s, var(--flare-settle-fade-delay);
+}
+.flare-fade-out-settled {
+  animation: flare-fade var(--flare-settle-fade) linear forwards;
+  animation-delay: var(--flare-settle-fade-delay);
+}
+@keyframes flare-sweep {
+  from { background-size: 0% 100%; }
+  to { background-size: 100% 100%; }
+}
+@keyframes flare-fade {
+  to { opacity: 0; }
+}
+@keyframes flare-text-in {
+  from { opacity: 0; filter: blur(2px); }
+  to { opacity: 1; filter: blur(0); }
+}
+
+/* While the model is still typing an edit. */
+.flare-typing-line { background-color: color-mix(in srgb, var(--color-success) 10%, transparent); }
+.flare-typed-text { background-color: color-mix(in srgb, var(--color-success) 22%, transparent); }
+
+/* Lines an edit removed, struck through above where they were. */
+.flare-phantom {
+  pointer-events: none;
+  animation:
+    flare-phantom-in var(--flare-phantom-in) ease-out backwards,
+    flare-fade var(--flare-phantom-fade) ease-in forwards;
+  animation-delay: 0s, var(--flare-phantom-fade-delay);
+}
+.flare-phantom-persist { animation: flare-phantom-in var(--flare-phantom-in) ease-out backwards; }
+.flare-phantom-line {
+  overflow: hidden;
+  white-space: pre;
+  color: color-mix(in srgb, var(--color-fg) 55%, transparent);
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, var(--color-danger) 70%, transparent);
+  background-color: color-mix(in srgb, var(--color-danger) 16%, transparent);
+  padding-left: 4px;
+}
+.flare-phantom-more { text-decoration: none; font-style: italic; }
+@keyframes flare-phantom-in {
+  from { opacity: 0; transform: translateY(-8px); }
+}
+
+/* The collaborator caret and its name tag. */
+.flare-caret { position: relative; pointer-events: none; }
+.flare-caret-bar {
+  position: absolute;
+  top: 0;
+  left: -1px;
+  width: 2px;
+  height: var(--flare-line-height, 18px);
+  background: var(--color-claude);
+  animation: flare-blink var(--flare-caret-blink) steps(1) infinite;
+}
+.flare-caret-tag {
+  position: absolute;
+  bottom: 100%;
+  left: -1px;
+  padding: 0 5px;
+  border-radius: 3px 3px 3px 0;
+  background: var(--color-claude);
+  color: var(--color-bg);
+  font: 600 10px/14px var(--font-sans);
+  white-space: nowrap;
+}
+@keyframes flare-blink {
+  50% { opacity: 0; }
+}
+
+/* The floating label above the lines being read or edited. */
+.flare-label {
+  pointer-events: none;
+  padding: 3px 9px;
+  border: 1px solid var(--flare-label-border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-surface-2) 94%, transparent);
+  color: var(--color-fg);
+  font: 11px/14px var(--font-sans);
+  white-space: nowrap;
+}
+.flare-label-read { --flare-label-border: color-mix(in srgb, var(--color-read) 55%, transparent); }
+.flare-label-edit { --flare-label-border: color-mix(in srgb, var(--color-claude) 60%, transparent); }
+
+/* Typed text that has no place in the file to land in. */
+.flare-typing-panel {
+  max-width: 60%;
+  margin: 8px 18px 0 0;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--color-claude) 60%, transparent);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-surface-2) 96%, transparent);
+  pointer-events: none;
+}
+.flare-typing-panel-title { padding: 3px 9px; color: var(--color-fg-muted); font: 11px/14px var(--font-sans); }
+.flare-typing-panel-text {
+  margin: 0;
+  padding: 2px 9px 6px;
+  overflow: hidden;
+  color: var(--color-fg);
+  font: 12px/1.4 var(--font-mono);
+  white-space: pre-wrap;
+}
+
+/* Tabs: a dot that pulses for a few seconds after the agent touches the file. */
+.flare-tab-dot {
+  animation:
+    flare-dot-pulse var(--flare-tab-pulse) ease-in-out var(--flare-tab-pulse-cycles),
+    flare-dot-hide 0s linear var(--flare-tab-pulse-total) forwards;
+}
+@keyframes flare-dot-pulse {
+  50% { opacity: 0.35; transform: scale(0.7); }
+}
+@keyframes flare-dot-hide {
+  to { opacity: 0; visibility: hidden; }
+}
+
+/* File tree heat, in ten steps from faint to hot. */
+.flare-heat[data-heat="1"] { --flare-heat: 0.1; } .flare-heat[data-heat="2"] { --flare-heat: 0.2; }
+.flare-heat[data-heat="3"] { --flare-heat: 0.3; } .flare-heat[data-heat="4"] { --flare-heat: 0.4; }
+.flare-heat[data-heat="5"] { --flare-heat: 0.5; } .flare-heat[data-heat="6"] { --flare-heat: 0.6; }
+.flare-heat[data-heat="7"] { --flare-heat: 0.7; } .flare-heat[data-heat="8"] { --flare-heat: 0.8; }
+.flare-heat[data-heat="9"] { --flare-heat: 0.9; } .flare-heat[data-heat="10"] { --flare-heat: 1; }
+.flare-heat[data-heat-kind="edit"] {
+  background-image: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--color-claude) calc(var(--flare-heat) * 32%), transparent),
+    transparent 85%
+  );
+  box-shadow:
+    inset 2px 0 0 color-mix(in srgb, var(--color-claude) calc(var(--flare-heat) * 100%), transparent),
+    inset 6px 0 8px -4px color-mix(in srgb, var(--color-claude) calc(var(--flare-heat) * 60%), transparent);
+}
+.flare-heat[data-heat-kind="read"] {
+  background-image: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--color-read) calc(var(--flare-heat) * 12%), transparent),
+    transparent 85%
+  );
+}
+.flare-spark {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--color-claude);
+  box-shadow: 0 0 6px 1px color-mix(in srgb, var(--color-claude) 70%, transparent);
+}
+
+/* Reduced motion keeps the highlights but drops the movement. */
+@media (prefers-reduced-motion: reduce) {
+  .flare-wave,
+  .flare-add,
+  .flare-add-text,
+  .flare-add-settled,
+  .flare-fade-out,
+  .flare-fade-out-settled,
+  .flare-phantom,
+  .flare-caret-bar,
+  .flare-tab-dot {
+    animation: none;
+  }
+  .flare-wave { background-color: color-mix(in srgb, var(--color-read) 14%, transparent); }
+}

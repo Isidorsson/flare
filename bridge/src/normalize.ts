@@ -8,9 +8,10 @@ import type {
 } from "@anthropic-ai/claude-agent-sdk";
 import { toolInputSchema, type BridgeEvent, type ToolInput } from "@flare/protocol";
 
+import { EditStreams } from "./edit-stream";
 import { FileChangeCapture, type ReadText } from "./file-capture";
 import { summarizeToolResult } from "./summary";
-import { classifyTool, searchResultPaths, type ToolEffect } from "./tools";
+import { classifyTool, searchResultPaths, singleFileMatches, type ToolEffect } from "./tools";
 
 type AssistantBlock = SDKAssistantMessage["message"]["content"][number];
 type TextBlock = Extract<AssistantBlock, { type: "text" }>;
@@ -26,25 +27,34 @@ export interface NormalizerOptions {
   sessionId: string;
   cwd: string;
   readText: ReadText;
+  now?: () => number;
 }
 
 export class MessageNormalizer {
   readonly #cwd: string;
   readonly #capture: FileChangeCapture;
+  readonly #edits: EditStreams;
   readonly #calls = new Map<string, ToolCall>();
   readonly #turnErrors = new Set<string>();
   #sessionId: string;
+  #turnOpen = false;
 
   constructor(options: NormalizerOptions) {
     this.#cwd = options.cwd;
     this.#sessionId = options.sessionId;
     this.#capture = new FileChangeCapture(options.readText);
+    this.#edits = new EditStreams({ cwd: options.cwd, now: options.now ?? Date.now });
   }
 
   async normalize(message: SDKMessage): Promise<BridgeEvent[]> {
+    const started = this.#startTurn(message);
+    return [...started, ...(await this.#dispatch(message))];
+  }
+
+  async #dispatch(message: SDKMessage): Promise<BridgeEvent[]> {
     switch (message.type) {
       case "stream_event":
-        return textDeltaEvents(message);
+        return [...textDeltaEvents(message), ...this.#edits.handle(message)];
       case "assistant":
         return this.#assistantEvents(message);
       case "user":
@@ -58,6 +68,14 @@ export class MessageNormalizer {
     }
   }
 
+  // The SDK has no turn-start message, so a turn begins with the first thing the main agent says after the last result.
+  #startTurn(message: SDKMessage): BridgeEvent[] {
+    const working = (message.type === "stream_event" || message.type === "assistant") && message.parent_tool_use_id === null;
+    if (!working || this.#turnOpen) return [];
+    this.#turnOpen = true;
+    return [{ type: "turn.started" }];
+  }
+
   beginTool(toolUseId: string, name: string, input: unknown): Promise<void> {
     const effect = classifyTool(name, input, this.#cwd);
     return effect.kind === "change" ? this.#capture.begin(toolUseId, effect.path) : Promise.resolve();
@@ -66,6 +84,8 @@ export class MessageNormalizer {
   reset(): void {
     this.#calls.clear();
     this.#capture.clear();
+    this.#edits.reset();
+    this.#turnOpen = false;
   }
 
   #initEvents(message: SDKSystemMessage): BridgeEvent[] {
@@ -97,7 +117,7 @@ export class MessageNormalizer {
     this.#calls.set(block.id, { effect });
     const started: BridgeEvent = { type: "tool.started", toolUseId: block.id, name: block.name, input };
     if (effect.kind !== "read") return [started];
-    return [started, { type: "file.read", toolUseId: block.id, path: effect.path }];
+    return [started, { type: "file.read", toolUseId: block.id, path: effect.path, range: effect.range }];
   }
 
   async #userEvents(message: SDKUserMessage): Promise<BridgeEvent[]> {
@@ -121,14 +141,14 @@ export class MessageNormalizer {
       isError,
       summary: summarizeToolResult(block.content),
     };
-    const reads =
-      effect?.kind === "search" && !isError
-        ? searchResultPaths(structured, this.#cwd).map((path): BridgeEvent => ({ type: "file.read", toolUseId, path }))
-        : [];
-    return [finished, ...reads, ...(await this.#capture.finish(toolUseId, isError))];
+    // The change goes first so the app can tell a finished edit that landed from one that never did.
+    const changes = await this.#capture.finish(toolUseId, isError);
+    return [...changes, finished, ...(isError ? [] : searchReadEvents(toolUseId, effect, structured, this.#cwd))];
   }
 
   #resultEvents(message: SDKResultMessage): BridgeEvent[] {
+    this.#turnOpen = false;
+    this.#edits.reset();
     const failure = resultFailure(message);
     const errors = failure === null ? [] : this.#errorEvents(failure);
     this.#turnErrors.clear();
@@ -151,6 +171,15 @@ export class MessageNormalizer {
     this.#turnErrors.add(text);
     return [{ type: "error", message: text }];
   }
+}
+
+function searchReadEvents(toolUseId: string, effect: ToolEffect | undefined, structured: unknown, cwd: string): BridgeEvent[] {
+  if (effect?.kind !== "search") return [];
+  const matches = singleFileMatches(effect, structured);
+  if (matches !== null) {
+    return [{ type: "file.read", toolUseId, path: matches.path, pattern: matches.pattern, matchLines: matches.matchLines }];
+  }
+  return searchResultPaths(structured, cwd).map((path): BridgeEvent => ({ type: "file.read", toolUseId, path }));
 }
 
 function textDeltaEvents(message: SDKPartialAssistantMessage): BridgeEvent[] {

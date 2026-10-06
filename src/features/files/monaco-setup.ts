@@ -30,7 +30,7 @@ function readToken(name: string): string {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 }
 
-function readColor(name: string): string {
+export function readColor(name: string): string {
   const value = readToken(name);
   if (!HEX_COLOR.test(value)) throw new Error(`Design token ${name} must be a #rrggbb colour, got "${value}"`);
   return value;
