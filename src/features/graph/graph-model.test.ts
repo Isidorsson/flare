@@ -4,9 +4,11 @@ import { diffSnapshots, edgeKey, isEmptyDiff } from "./graph-diff";
 import {
   applyDiff,
   createCodeGraph,
+  displayNode,
   EDGE_TYPE,
   readPositions,
   snapshotToGraph,
+  type NodeAttrs,
 } from "./graph-model";
 import type { GraphSnapshot, Language } from "./graph-types";
 import { FILE_SPREAD_RADIUS, initialPosition, positionNear } from "./placement";
@@ -198,5 +200,13 @@ describe("applyDiff", () => {
 
   test("positionNear falls back to the folder position without neighbours", () => {
     expect(positionNear("src/a.ts", [])).toEqual(initialPosition("src/a.ts"));
+  });
+});
+
+describe("displayNode", () => {
+  test("keeps the layout position under the reducer's style", () => {
+    const data: NodeAttrs = { x: 12, y: -3, size: 4, label: "a.ts", language: "typescript", dirKey: "src" };
+    const style = { color: "#fff", size: 9, label: "a.ts", zIndex: 1, forceLabel: false, highlighted: false };
+    expect(displayNode(data, style)).toMatchObject({ x: 12, y: -3, size: 9, color: "#fff" });
   });
 });

@@ -17,7 +17,7 @@ export type SessionSettings = z.infer<typeof sessionSettingsSchema>;
 export const DEFAULT_SESSION_SETTINGS: SessionSettings = {
   model: "sonnet",
   effort: "medium",
-  permissionMode: "default",
+  permissionMode: "auto",
 };
 
 export const MODEL_LABELS: Record<Model, string> = {
@@ -35,6 +35,7 @@ export const EFFORT_LABELS: Record<Effort, string> = {
 };
 
 export const PERMISSION_MODE_LABELS: Record<PermissionMode, string> = {
+  auto: "Auto",
   default: "Ask before edits",
   acceptEdits: "Accept edits",
   plan: "Plan only",

@@ -1,5 +1,6 @@
 import Graph from "graphology";
 
+import type { NodeStyle } from "./appearance";
 import type { SnapshotDiff } from "./graph-diff";
 import { baseName, directoryKey } from "./graph-paths";
 import type { GraphEdgeData, GraphSnapshot, Language } from "./graph-types";
@@ -19,6 +20,13 @@ export interface EdgeAttrs {
 }
 
 export type CodeGraph = Graph<NodeAttrs, EdgeAttrs>;
+
+export type NodeDisplay = NodeAttrs & NodeStyle;
+
+/** Sigma renders whatever a node reducer returns, so the position has to travel with the style. */
+export function displayNode(data: NodeAttrs, style: NodeStyle): NodeDisplay {
+  return { ...data, ...style };
+}
 
 export const EDGE_TYPE = "arrow";
 const BASE_NODE_SIZE = 4;

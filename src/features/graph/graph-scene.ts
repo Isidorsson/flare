@@ -6,17 +6,18 @@ import {
   type AppearanceContext,
   type EdgeStyle,
   type Focus,
-  type NodeStyle,
 } from "./appearance";
 import { createHoverDrawer, drawHalo } from "./canvas-draw";
 import { diffSnapshots, isEmptyDiff } from "./graph-diff";
 import {
   applyDiff,
   createCodeGraph,
+  displayNode,
   readPositions,
   type CodeGraph,
   type EdgeAttrs,
   type NodeAttrs,
+  type NodeDisplay,
 } from "./graph-model";
 import type { GraphState, GraphStore } from "./graph-store";
 import type { GraphSnapshot } from "./graph-types";
@@ -162,8 +163,8 @@ export class GraphScene {
     };
   }
 
-  private reduceNode(id: string, data: NodeAttrs): NodeStyle {
-    return nodeStyle(
+  private reduceNode(id: string, data: NodeAttrs): NodeDisplay {
+    const style = nodeStyle(
       {
         id,
         label: data.label,
@@ -173,6 +174,7 @@ export class GraphScene {
       },
       this.appearance,
     );
+    return displayNode(data, style);
   }
 
   private reduceEdge(edge: string): EdgeStyle {
