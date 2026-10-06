@@ -33,6 +33,7 @@ const start: AppMessage = {
   model: "sonnet",
   effort: "low",
   permissionMode: "plan",
+  responseStyle: "concise",
 };
 
 describe("processLine", () => {

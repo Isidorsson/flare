@@ -19,6 +19,7 @@ const START: AppMessageOf<"session.start"> = {
   model: "sonnet",
   effort: "high",
   permissionMode: "default",
+  responseStyle: "concise",
 };
 
 function setup(files: Record<string, string> = {}) {

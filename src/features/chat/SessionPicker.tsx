@@ -1,34 +1,48 @@
-import { EFFORT_LEVELS, PERMISSION_MODES, effortSchema, permissionModeSchema } from "@flare/protocol";
-import type { ReactNode } from "react";
+import {
+  EFFORT_LEVELS,
+  PERMISSION_MODES,
+  RESPONSE_STYLES,
+  effortSchema,
+  permissionModeSchema,
+  responseStyleSchema,
+} from "@flare/protocol";
 
 import {
   EFFORT_LABELS,
   MODEL_IDS,
   MODEL_LABELS,
   PERMISSION_MODE_LABELS,
+  RESPONSE_STYLE_LABELS,
   modelSchema,
 } from "@/features/agent/session-settings";
 import { useAgent } from "@/features/agent/use-agent";
 
-interface PickerProps {
+interface PickerProps<T extends string> {
   label: string;
-  value: string;
-  onChange: (value: string) => void;
-  children: ReactNode;
+  title?: string;
+  value: T;
+  options: readonly T[];
+  labels: Record<T, string>;
+  parse: (value: string) => T;
+  onChange: (value: T) => void;
 }
 
-function Picker({ label, value, onChange, children }: PickerProps) {
+function Picker<T extends string>({ label, title, value, options, labels, parse, onChange }: PickerProps<T>) {
   return (
-    <label className="flex items-center gap-1.5 text-[11px] text-fg-subtle">
+    <label title={title} className="flex items-center gap-1.5 text-[11px] text-fg-subtle">
       <span>{label}</span>
       <select
         value={value}
         onChange={(event) => {
-          onChange(event.target.value);
+          onChange(parse(event.target.value));
         }}
         className="h-6 rounded-md border border-border bg-surface-2 px-1.5 text-xs text-fg outline-none hover:border-border-strong focus-visible:border-accent"
       >
-        {children}
+        {options.map((option) => (
+          <option key={option} value={option}>
+            {labels[option]}
+          </option>
+        ))}
       </select>
     </label>
   );
@@ -43,42 +57,44 @@ export function SessionPicker() {
       <Picker
         label="Model"
         value={settings.model}
-        onChange={(value) => {
-          changeSettings({ model: modelSchema.parse(value) });
+        options={MODEL_IDS}
+        labels={MODEL_LABELS}
+        parse={(value) => modelSchema.parse(value)}
+        onChange={(model) => {
+          changeSettings({ model });
         }}
-      >
-        {MODEL_IDS.map((id) => (
-          <option key={id} value={id}>
-            {MODEL_LABELS[id]}
-          </option>
-        ))}
-      </Picker>
+      />
       <Picker
         label="Effort"
         value={settings.effort}
-        onChange={(value) => {
-          changeSettings({ effort: effortSchema.parse(value) });
+        options={EFFORT_LEVELS}
+        labels={EFFORT_LABELS}
+        parse={(value) => effortSchema.parse(value)}
+        onChange={(effort) => {
+          changeSettings({ effort });
         }}
-      >
-        {EFFORT_LEVELS.map((level) => (
-          <option key={level} value={level}>
-            {EFFORT_LABELS[level]}
-          </option>
-        ))}
-      </Picker>
+      />
       <Picker
         label="Permissions"
         value={settings.permissionMode}
-        onChange={(value) => {
-          changeSettings({ permissionMode: permissionModeSchema.parse(value) });
+        options={PERMISSION_MODES}
+        labels={PERMISSION_MODE_LABELS}
+        parse={(value) => permissionModeSchema.parse(value)}
+        onChange={(permissionMode) => {
+          changeSettings({ permissionMode });
         }}
-      >
-        {PERMISSION_MODES.map((mode) => (
-          <option key={mode} value={mode}>
-            {PERMISSION_MODE_LABELS[mode]}
-          </option>
-        ))}
-      </Picker>
+      />
+      <Picker
+        label="Style"
+        title="Applies from the next session"
+        value={settings.responseStyle}
+        options={RESPONSE_STYLES}
+        labels={RESPONSE_STYLE_LABELS}
+        parse={(value) => responseStyleSchema.parse(value)}
+        onChange={(responseStyle) => {
+          changeSettings({ responseStyle });
+        }}
+      />
     </div>
   );
 }

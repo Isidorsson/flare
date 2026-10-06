@@ -137,6 +137,7 @@ export class AgentController {
         model: settings.model,
         effort: settings.effort,
         permissionMode: settings.permissionMode,
+        responseStyle: settings.responseStyle,
         ...(thread.sessionId === null ? {} : { resume: thread.sessionId }),
       });
     } catch (error) {

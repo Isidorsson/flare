@@ -329,6 +329,17 @@ describe("settings", () => {
     ]);
   });
 
+  test("keeps a response style change for the next session instead of sending it live", async () => {
+    const ctx = setup();
+    await startThread(ctx);
+
+    ctx.state().changeSettings({ responseStyle: "explanatory" });
+    await ctx.settle();
+
+    expect(ctx.sent).toHaveLength(2);
+    expect(ctx.state().settings.responseStyle).toBe("explanatory");
+  });
+
   test("only stores settings when nothing is live and uses them for the next session", async () => {
     const ctx = setup();
     ctx.state().changeSettings({ model: "haiku", effort: "low" });

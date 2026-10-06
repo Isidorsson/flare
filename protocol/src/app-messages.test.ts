@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { appMessageSchema } from "./app-messages";
-import { PERMISSION_MODES } from "./constants";
+import { PERMISSION_MODES, RESPONSE_STYLES } from "./constants";
 
 const validMessages: Record<string, object> = {
   "session.start": {
@@ -10,6 +10,7 @@ const validMessages: Record<string, object> = {
     model: "sonnet",
     effort: "high",
     permissionMode: "default",
+    responseStyle: "concise",
   },
   "session.start with resume": {
     type: "session.start",
@@ -17,6 +18,7 @@ const validMessages: Record<string, object> = {
     model: "opus",
     effort: "max",
     permissionMode: "acceptEdits",
+    responseStyle: "concise",
     resume: "5a7c1e1e-0000-4000-8000-000000000000",
   },
   "user.message": { type: "user.message", text: "hello" },
@@ -33,13 +35,20 @@ const invalidMessages: Record<string, unknown> = {
   "unknown type": { type: "session.stop" },
   "missing type": { text: "hello" },
   "not an object": "interrupt",
-  "session.start without cwd": { type: "session.start", model: "sonnet", effort: "high", permissionMode: "default" },
+  "session.start without cwd": {
+    type: "session.start",
+    model: "sonnet",
+    effort: "high",
+    permissionMode: "default",
+    responseStyle: "concise",
+  },
   "session.start with empty model": {
     type: "session.start",
     cwd: "C:/work/app",
     model: "",
     effort: "high",
     permissionMode: "default",
+    responseStyle: "concise",
   },
   "session.start with unknown effort": {
     type: "session.start",
@@ -47,6 +56,7 @@ const invalidMessages: Record<string, unknown> = {
     model: "sonnet",
     effort: "extreme",
     permissionMode: "default",
+    responseStyle: "concise",
   },
   "session.start with unsupported permission mode": {
     type: "session.start",
@@ -54,6 +64,22 @@ const invalidMessages: Record<string, unknown> = {
     model: "sonnet",
     effort: "high",
     permissionMode: "bypassPermissions",
+    responseStyle: "concise",
+  },
+  "session.start without responseStyle": {
+    type: "session.start",
+    cwd: "C:/work/app",
+    model: "sonnet",
+    effort: "high",
+    permissionMode: "default",
+  },
+  "session.start with unknown responseStyle": {
+    type: "session.start",
+    cwd: "C:/work/app",
+    model: "sonnet",
+    effort: "high",
+    permissionMode: "default",
+    responseStyle: "verbose",
   },
   "session.start with empty resume": {
     type: "session.start",
@@ -61,6 +87,7 @@ const invalidMessages: Record<string, unknown> = {
     model: "sonnet",
     effort: "high",
     permissionMode: "default",
+    responseStyle: "concise",
     resume: "",
   },
   "user.message with empty text": { type: "user.message", text: "" },
@@ -82,11 +109,30 @@ describe("appMessageSchema", () => {
   });
 
   test.each([...PERMISSION_MODES])("accepts permission mode %s when starting and switching", (permissionMode) => {
-    const start = { type: "session.start", cwd: "C:/work/app", model: "sonnet", effort: "high", permissionMode };
+    const start = {
+      type: "session.start",
+      cwd: "C:/work/app",
+      model: "sonnet",
+      effort: "high",
+      permissionMode,
+      responseStyle: "concise",
+    };
     const switchMode = { type: "session.setPermissionMode", permissionMode };
 
     expect(appMessageSchema.parse(start)).toMatchObject(start);
     expect(appMessageSchema.parse(switchMode)).toMatchObject(switchMode);
+  });
+
+  test.each([...RESPONSE_STYLES])("accepts response style %s when starting", (responseStyle) => {
+    const start = {
+      type: "session.start",
+      cwd: "C:/work/app",
+      model: "sonnet",
+      effort: "high",
+      permissionMode: "auto",
+      responseStyle,
+    };
+    expect(appMessageSchema.parse(start)).toMatchObject(start);
   });
 
   test("covers every message type in the plan", () => {

@@ -11,6 +11,7 @@ import type { ReadText } from "./file-capture";
 import { MessageNormalizer } from "./normalize";
 import { PermissionBroker } from "./permissions";
 import { AsyncQueue } from "./queue";
+import { responseStyleOptions } from "./response-style";
 
 export interface AgentQuery extends AsyncIterable<SDKMessage> {
   interrupt(): Promise<unknown>;
@@ -159,7 +160,7 @@ function buildOptions({ message, sessionId, executable, broker, normalizer, log 
     permissionMode: message.permissionMode,
     includePartialMessages: true,
     pathToClaudeCodeExecutable: executable,
-    systemPrompt: { type: "preset", preset: "claude_code" },
+    ...responseStyleOptions(message.responseStyle),
     canUseTool: broker.canUseTool,
     hooks: { PreToolUse: [{ hooks: [captureBeforeToolUse(normalizer)] }] },
     stderr: log,
