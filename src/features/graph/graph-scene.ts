@@ -255,7 +255,6 @@ export class GraphScene {
     if (state.snapshot !== previous.snapshot) this.applySnapshot(state.snapshot);
     const appearanceChanged =
       state.colorBy !== previous.colorBy ||
-      state.mode !== previous.mode ||
       state.blast !== previous.blast ||
       state.level !== previous.level ||
       state.selected !== previous.selected;
@@ -362,8 +361,7 @@ export class GraphScene {
   };
 
   private hasFlowingSelection(reducedMotion: boolean): boolean {
-    const { selected, blast } = this.store.getState();
-    return !reducedMotion && (selected !== null || blast !== null);
+    return !reducedMotion && this.store.getState().selected !== null;
   }
 
   private readonly beat = (): boolean => {

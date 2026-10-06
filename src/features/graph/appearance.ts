@@ -76,7 +76,6 @@ const OUTSIDE: BlastRole = { kind: "outside" };
 export function blastRole(blast: BlastState | null, id: string): BlastRole {
   if (blast === null) return INACTIVE;
   if (blast.origin === id) return ORIGIN;
-  if (blast.depths === null) return INACTIVE;
   const depth = blast.depths.get(id);
   return depth === undefined ? OUTSIDE : { kind: "dependent", depth };
 }

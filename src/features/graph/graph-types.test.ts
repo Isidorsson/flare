@@ -1,12 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import {
-  blastRadiusSchema,
-  changeSchema,
-  graphSnapshotSchema,
-  LANGUAGES,
-  type GraphSnapshot,
-} from "./graph-types";
+import { changeSchema, graphSnapshotSchema, LANGUAGES, type GraphSnapshot } from "./graph-types";
 
 const rustJson: GraphSnapshot = {
   root: "C:/Users/me/app",
@@ -68,20 +62,6 @@ describe("graph snapshot schema", () => {
     const nodes = LANGUAGES.map((language) => ({ id: `src/file.${language}`, language }));
     const snapshot = { root: "C:/app", nodes, edges: [], warnings: [] };
     expect(graphSnapshotSchema.parse(snapshot).nodes.map((node) => node.language)).toEqual([...LANGUAGES]);
-  });
-});
-
-describe("blast radius schema", () => {
-  test("accepts dependents with positive depths", () => {
-    const radius = { origin: "src/a.ts", nodes: [{ id: "src/b.ts", depth: 1 }] };
-    expect(blastRadiusSchema.parse(radius)).toEqual(radius);
-  });
-
-  test("rejects zero, negative and fractional depths", () => {
-    for (const depth of [0, -1, 1.5]) {
-      const radius = { origin: "src/a.ts", nodes: [{ id: "src/b.ts", depth }] };
-      expect(blastRadiusSchema.safeParse(radius).success).toBe(false);
-    }
   });
 });
 

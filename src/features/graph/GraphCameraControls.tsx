@@ -3,9 +3,8 @@ import { Crosshair } from "lucide-react";
 import { IconButton } from "@/shared/ui/IconButton";
 import { Tooltip } from "@/shared/ui/Tooltip";
 
+import { PRESSED_CLASS } from "./toolbar-style";
 import { graphStore, useGraph } from "./use-graph";
-
-const ACTIVE_CLASS = "bg-accent-soft! text-accent! hover:bg-accent-soft! hover:text-accent!";
 
 function FitButton() {
   return (
@@ -36,7 +35,7 @@ export function GraphCameraControls() {
         onClick={() => {
           graphStore.getState().toggleFollow();
         }}
-        className={follow ? ACTIVE_CLASS : ""}
+        className={follow ? PRESSED_CLASS : ""}
       />
     </>
   );

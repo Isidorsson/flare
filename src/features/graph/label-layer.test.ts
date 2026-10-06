@@ -39,7 +39,6 @@ function makeStore(): GraphStore {
   const api: GraphApi = {
     build: () => Promise.resolve(SNAPSHOT),
     snapshot: () => Promise.resolve(SNAPSHOT),
-    blastRadius: (path) => Promise.resolve({ origin: path, nodes: [] }),
     updateFile: () => Promise.resolve("unchanged"),
     removeFile: () => Promise.resolve("unchanged"),
   };

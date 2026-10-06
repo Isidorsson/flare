@@ -46,13 +46,6 @@ describe("graph api", () => {
     expect(calls).toEqual([{ command: "graph_snapshot", args: undefined }]);
   });
 
-  test("blastRadius sends the path and parses dependents", async () => {
-    const { invoke, calls } = fakeInvoke({ origin: "src/a.ts", nodes: [{ id: "src/b.ts", depth: 2 }] });
-    const radius = await createGraphApi(invoke).blastRadius("src/a.ts");
-    expect(calls).toEqual([{ command: "graph_blast_radius", args: { path: "src/a.ts" } }]);
-    expect(radius.nodes).toEqual([{ id: "src/b.ts", depth: 2 }]);
-  });
-
   test("updateFile and removeFile return the change kind", async () => {
     const updated = fakeInvoke("updated");
     expect(await createGraphApi(updated.invoke).updateFile("src/a.ts")).toBe("updated");

@@ -5,7 +5,9 @@ import { Tooltip } from "@/shared/ui/Tooltip";
 
 import { GraphCameraControls } from "./GraphCameraControls";
 import { HudChips } from "./HudChips";
+import { BLAST_LABEL, blastToggleDetail } from "./blast-copy";
 import type { ColorBy } from "./graph-store";
+import { PRESSED_CLASS } from "./toolbar-style";
 import { graphStore, useGraph } from "./use-graph";
 
 const COLOR_MODES: readonly { value: ColorBy; label: string; hint: string }[] = [
@@ -57,8 +59,24 @@ function WarningBadge() {
   );
 }
 
+function BlastToggle() {
+  const on = useGraph((state) => state.reach === "blast");
+  const hasSelection = useGraph((state) => state.selected !== null);
+  return (
+    <IconButton
+      icon={Radar}
+      label={BLAST_LABEL}
+      detail={blastToggleDetail(on, hasSelection)}
+      aria-pressed={on}
+      onClick={() => {
+        graphStore.getState().setReach(on ? "direct" : "blast");
+      }}
+      className={on ? PRESSED_CLASS : ""}
+    />
+  );
+}
+
 export function GraphToolbar() {
-  const blastMode = useGraph((state) => state.mode === "blast");
   const loading = useGraph((state) => state.status === "loading");
   return (
     <div className="flex shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-1.5 border-b border-border bg-bg px-2 py-1.5">
@@ -67,15 +85,7 @@ export function GraphToolbar() {
         <WarningBadge />
         <ColorModeSwitch />
         <GraphCameraControls />
-        <IconButton
-          icon={Radar}
-          label="Show blast radius of a file"
-          aria-pressed={blastMode}
-          onClick={() => {
-            graphStore.getState().setMode(blastMode ? "explore" : "blast");
-          }}
-          className={blastMode ? "bg-accent-soft! text-accent! hover:bg-accent-soft! hover:text-accent!" : ""}
-        />
+        <BlastToggle />
         <IconButton
           icon={RefreshCw}
           label="Reindex the project"

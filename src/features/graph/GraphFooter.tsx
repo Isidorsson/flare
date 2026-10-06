@@ -3,11 +3,13 @@ import { useState, type ReactNode } from "react";
 import { Tooltip } from "@/shared/ui/Tooltip";
 
 import { ACTIVITY_TOKENS } from "./activity-palette";
-import { folderColor } from "./appearance";
+import { blastColor, folderColor } from "./appearance";
+import { BLAST_HINT, blastSummary, DEPTH_LABELS } from "./blast-copy";
+import { depthBuckets } from "./blast-radius";
 import { graphIndexFor, type GraphIndex } from "./graph-index";
 import { baseName } from "./graph-paths";
 import { LANGUAGES, type Language } from "./graph-types";
-import type { GraphLevel } from "./graph-store";
+import type { BlastState, GraphLevel } from "./graph-store";
 import { readCssVariable, readPalette, type Palette } from "./palette";
 import { ROLE_LABELS, ROLES } from "./roles";
 import { graphStore, useGraph } from "./use-graph";
@@ -126,29 +128,48 @@ function ActivityLegend() {
   );
 }
 
-function blastMessage(origin: string, dependents: number | null): string {
-  if (dependents === null) return `Tracing dependents of ${baseName(origin)}…`;
-  if (dependents === 0) return `Nothing imports ${baseName(origin)}`;
-  const noun = dependents === 1 ? "file depends" : "files depend";
-  return `${dependents} ${noun} on ${baseName(origin)}`;
-}
-
-function BlastFooter({ palette }: { palette: Palette }) {
-  const blast = useGraph((state) => state.blast);
-  if (blast === null) return <p>Click a file to see everything that depends on it.</p>;
-  const items = [
+function BlastFooter({ blast, palette }: { blast: BlastState; palette: Palette }) {
+  const buckets = depthBuckets(blast.depths, DEPTH_LABELS.length);
+  const items: LegendItem[] = [
     { color: palette.blastOrigin, label: "Selected" },
-    { color: palette.blastDepths[0] ?? palette.dim, label: "Direct" },
-    { color: palette.blastDepths[1] ?? palette.dim, label: "2 hops" },
-    { color: palette.blastDepths[2] ?? palette.dim, label: "3+ hops" },
+    ...DEPTH_LABELS.map((label, position) => ({ color: blastColor(palette, position + 1), label, count: buckets[position] })),
   ];
   return (
     <div className="space-y-1">
       <p role="status" className="text-fg">
-        {blastMessage(blast.origin, blast.depths?.size ?? null)}
+        {blastSummary(blast.origin, blast.depths.size)}
       </p>
       <Legend label="Blast radius" items={items} />
     </div>
+  );
+}
+
+function NeighbourLegend({ palette }: { palette: Palette }) {
+  return (
+    <Legend
+      label="Selected file"
+      items={[
+        { color: palette.importer, label: "imports it" },
+        { color: palette.imports, label: "it imports" },
+      ]}
+    />
+  );
+}
+
+function ReachHint({ palette }: { palette: Palette }) {
+  const reach = useGraph((state) => state.reach);
+  const hasSelection = useGraph((state) => state.selected !== null);
+  if (reach === "blast") return <p>{BLAST_HINT}</p>;
+  return hasSelection ? <NeighbourLegend palette={palette} /> : null;
+}
+
+function BaseLegends({ palette }: { palette: Palette }) {
+  return (
+    <>
+      <ColorLegend palette={palette} />
+      <ActivityLegend />
+      <ReachHint palette={palette} />
+    </>
   );
 }
 
@@ -184,14 +205,11 @@ function Legends({ children }: { children: ReactNode }) {
 }
 
 export function GraphFooter() {
-  const mode = useGraph((state) => state.mode);
+  const blast = useGraph((state) => state.blast);
   const [palette] = useState(() => readPalette(readCssVariable));
   return (
     <div className="flex shrink-0 items-end justify-between gap-3 border-t border-border bg-bg px-2.5 py-1.5 font-mono text-[11px] text-fg-muted">
-      <Legends>
-        {mode === "blast" ? <BlastFooter palette={palette} /> : <ColorLegend palette={palette} />}
-        {mode === "blast" ? null : <ActivityLegend />}
-      </Legends>
+      <Legends>{blast === null ? <BaseLegends palette={palette} /> : <BlastFooter blast={blast} palette={palette} />}</Legends>
       <LevelControl />
     </div>
   );

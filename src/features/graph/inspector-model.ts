@@ -1,5 +1,6 @@
 import type { NodeActivity } from "./activity-state";
 import type { ActivityKind } from "./activity-types";
+import { blastDepths } from "./blast-radius";
 import { fileFolder } from "./directory-tree";
 import type { GraphIndex } from "./graph-index";
 import { baseName } from "./graph-paths";
@@ -54,28 +55,6 @@ export function fileRef(id: string): FileRef {
   return { id, name: baseName(id), folder: fileFolder(id) };
 }
 
-function newDependents(index: GraphIndex, frontier: readonly string[], seen: Set<string>): string[] {
-  const found: string[] = [];
-  for (const dependent of frontier.flatMap((current) => index.importers.get(current) ?? [])) {
-    if (seen.has(dependent)) continue;
-    seen.add(dependent);
-    found.push(dependent);
-  }
-  return found;
-}
-
-/** Every file that reaches `id` through imports, nearest first; the file itself is not included. */
-export function transitiveDependents(index: GraphIndex, id: string): string[] {
-  const seen = new Set<string>([id]);
-  const order: string[] = [];
-  let frontier = newDependents(index, [id], seen);
-  while (frontier.length > 0) {
-    order.push(...frontier);
-    frontier = newDependents(index, frontier, seen);
-  }
-  return order;
-}
-
 function sortedRefs(ids: readonly string[], index: GraphIndex): FileRef[] {
   return [...ids]
     .sort((a, b) => (index.importance.get(b) ?? 0) - (index.importance.get(a) ?? 0) || (a < b ? -1 : 1))
@@ -103,7 +82,7 @@ export function inspectFile(
   if (role === undefined) return null;
   const importers = index.importers.get(id) ?? [];
   const imports = index.imports.get(id) ?? [];
-  const dependents = transitiveDependents(index, id);
+  const dependents = [...blastDepths(index, id).keys()];
   return {
     id,
     name: baseName(id),
