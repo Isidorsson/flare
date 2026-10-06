@@ -11,6 +11,7 @@ import { recordAgentActivity, setAgentStatus, startTurn } from "@/features/graph
 
 import { createAgentEventRouter } from "./agent-event-router";
 import { createGraphActivityRouter } from "./graph-activity-router";
+import { wireCheckpoints } from "./wire-checkpoints";
 
 export function wireAgentEvents(): () => void {
   const unsubscribeGraph = subscribeAgentEvents(
@@ -26,8 +27,10 @@ export function wireAgentEvents(): () => void {
       endFileEditing: endAgentFileEditing,
     }),
   );
+  const unsubscribeCheckpoints = wireCheckpoints();
   return () => {
     unsubscribeGraph();
     unsubscribeFiles();
+    unsubscribeCheckpoints();
   };
 }

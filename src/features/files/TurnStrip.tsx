@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 
+import { LatestTurnUndo } from "@/features/checkpoints/LatestTurnUndo";
 import { Tooltip } from "@/shared/ui/Tooltip";
 
 import { agentActivity } from "./live/use-live";
@@ -49,6 +50,9 @@ export function TurnStrip() {
           <Chip key={file.path} file={file} root={root} />
         ))}
       </div>
+      <span className="ml-auto shrink-0">
+        <LatestTurnUndo />
+      </span>
     </div>
   );
 }
