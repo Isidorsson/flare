@@ -14,6 +14,7 @@ function fileChange(path: string): BridgeEvent {
 function setup() {
   const changes: AgentFileChange[] = [];
   const reads: string[] = [];
+  const pulses: string[] = [];
   const route = createAgentEventRouter({
     applyFileChange: (change) => {
       changes.push(change);
@@ -21,8 +22,11 @@ function setup() {
     noteFileRead: (path) => {
       reads.push(path);
     },
+    pulse: (path, kind) => {
+      pulses.push(`${kind}:${path}`);
+    },
   });
-  return { route, changes, reads };
+  return { route, changes, reads, pulses };
 }
 
 describe("agent event router", () => {
@@ -55,10 +59,18 @@ describe("agent event router", () => {
     expect(reads).toEqual(["C:\\app\\b.ts"]);
   });
 
+  test("pulses the graph for reads and changes", () => {
+    const { route, pulses } = setup();
+    route({ type: "file.read", toolUseId: "t", path: "a.ts" });
+    route(fileChange("b.ts"));
+    expect(pulses).toEqual(["read:a.ts", "change:b.ts"]);
+  });
+
   test("ignores unrelated events", () => {
-    const { route, changes, reads } = setup();
+    const { route, changes, reads, pulses } = setup();
     route({ type: "assistant.delta", text: "hi" });
     expect(changes).toEqual([]);
     expect(reads).toEqual([]);
+    expect(pulses).toEqual([]);
   });
 });

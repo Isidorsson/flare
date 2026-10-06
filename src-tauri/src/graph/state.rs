@@ -18,6 +18,10 @@ impl GraphState {
         Ok(snapshot)
     }
 
+    pub fn is_indexed(&self) -> bool {
+        self.lock().is_ok_and(|guard| guard.is_some())
+    }
+
     pub fn snapshot(&self) -> Result<GraphSnapshot, GraphError> {
         self.with_indexer(|indexer| Ok(indexer.snapshot()))
     }

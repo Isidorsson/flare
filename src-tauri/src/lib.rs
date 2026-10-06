@@ -33,6 +33,10 @@ pub fn run() {
             pty::commands::pty_resize,
             pty::commands::pty_kill,
         ])
+        .setup(|app| {
+            graph::watch::spawn(app.handle().clone());
+            Ok(())
+        })
         .on_page_load(pty::on_page_load)
         .build(tauri::generate_context!())
         .expect("failed to build Flare")

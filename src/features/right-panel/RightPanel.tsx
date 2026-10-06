@@ -1,6 +1,7 @@
 import { FolderTree, Network, type LucideIcon } from "lucide-react";
 import type { KeyboardEvent } from "react";
 
+import { openFile } from "@/features/files";
 import { FilesPanel } from "@/features/files/FilesPanel";
 import { GraphPanel } from "@/features/graph/GraphPanel";
 import { RIGHT_TABS, type RightTab } from "@/features/shell/layout-constants";
@@ -61,6 +62,13 @@ export function RightPanel() {
     document.getElementById(tabId(next))?.focus();
   }
 
+  function openFromGraph(path: string) {
+    setRightTab("files");
+    openFile(path).catch((error: unknown) => {
+      console.error(`flare: could not open ${path} from the graph`, error);
+    });
+  }
+
   return (
     <div className="flex h-full flex-col">
       <div
@@ -86,7 +94,7 @@ export function RightPanel() {
         aria-labelledby={tabId(activeTab)}
         className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto"
       >
-        {activeTab === "files" ? <FilesPanel /> : <GraphPanel />}
+        {activeTab === "files" ? <FilesPanel /> : <GraphPanel onOpenFile={openFromGraph} />}
       </div>
     </div>
   );

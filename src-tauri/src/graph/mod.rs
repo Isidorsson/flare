@@ -9,6 +9,7 @@ mod paths;
 mod resolve;
 pub mod state;
 mod walk;
+pub mod watch;
 
 #[cfg(test)]
 mod tests;
