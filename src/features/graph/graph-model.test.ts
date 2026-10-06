@@ -1,24 +1,17 @@
 import { describe, expect, test } from "bun:test";
 
-import { diffSnapshots, edgeKey, isEmptyDiff } from "./graph-diff";
-import {
-  applyDiff,
-  createCodeGraph,
-  displayNode,
-  EDGE_TYPE,
-  readPositions,
-  snapshotToGraph,
-  type NodeAttrs,
-} from "./graph-model";
+import { folderId } from "./directory-tree";
+import { diffSnapshots } from "./graph-diff";
+import { createCodeGraph, displayNode, IMPORT_EDGE_TYPE, readPositions, TREE_EDGE_TYPE, type NodeAttrs } from "./graph-model";
+import { snapshotToGraph, syncGraph } from "./graph-sync";
 import type { GraphSnapshot, Language } from "./graph-types";
-import { FILE_SPREAD_RADIUS, initialPosition, positionNear } from "./placement";
 
 function snapshot(
   nodes: readonly (readonly [string, Language])[],
   edges: readonly (readonly [string, string])[] = [],
 ): GraphSnapshot {
   return {
-    root: "C:/app",
+    root: "C:/work/shop",
     nodes: nodes.map(([id, language]) => ({ id, language })),
     edges: edges.map(([source, target]) => ({ source, target })),
     warnings: [],
@@ -37,93 +30,85 @@ const base = snapshot(
   ],
 );
 
+function edgeList(graph: ReturnType<typeof createCodeGraph>): string[] {
+  return graph.edges().map((edge) => `${graph.source(edge)}>${graph.target(edge)}`).sort();
+}
+
 describe("snapshotToGraph", () => {
   const graph = snapshotToGraph(base, new Map());
 
-  test("creates a directed node per file with display attributes", () => {
-    expect(graph.order).toBe(3);
-    expect(graph.getNodeAttribute("src/a.ts", "label")).toBe("a.ts");
-    expect(graph.getNodeAttribute("src/a.ts", "dirKey")).toBe("src");
-    expect(graph.getNodeAttribute("core/lib.rs", "language")).toBe("rust");
+  test("creates a file node per file and a folder node per directory", () => {
+    expect(graph.hasNode("src/a.ts")).toBe(true);
+    expect(graph.hasNode(folderId("src"))).toBe(true);
+    expect(graph.hasNode(folderId("core"))).toBe(true);
+    expect(graph.hasNode(folderId(""))).toBe(true);
+    expect(graph.order).toBe(3 + 3);
   });
 
-  test("creates directed arrow edges and never self-loops", () => {
+  test("describes files and folders for the view", () => {
+    const file = graph.getNodeAttributes("src/a.ts");
+    expect(file).toMatchObject({ kind: "file", label: "a.ts", language: "typescript", folder: "src", hub: "src" });
+    const folder = graph.getNodeAttributes(folderId("src"));
+    expect(folder).toMatchObject({ kind: "folder", label: "src", language: null, files: 2, hub: "src" });
+    expect(graph.getNodeAttribute(folderId(""), "label")).toBe("shop");
+  });
+
+  test("keeps import edges apart from folder links, and never self-loops", () => {
     expect(graph.hasDirectedEdge("src/a.ts", "src/b.ts")).toBe(true);
     expect(graph.hasDirectedEdge("src/b.ts", "src/a.ts")).toBe(false);
-    expect(graph.size).toBe(1);
     const edge = graph.edge("src/a.ts", "src/b.ts");
-    expect(edge === undefined ? undefined : graph.getEdgeAttribute(edge, "type")).toBe(EDGE_TYPE);
+    expect(edge === undefined ? undefined : graph.getEdgeAttributes(edge)).toMatchObject({
+      kind: "import",
+      type: IMPORT_EDGE_TYPE,
+    });
+    const link = graph.edge(folderId("src"), "src/a.ts");
+    expect(link === undefined ? undefined : graph.getEdgeAttributes(link)).toMatchObject({ kind: "tree", type: TREE_EDGE_TYPE });
+    expect(graph.hasDirectedEdge(folderId(""), folderId("src"))).toBe(true);
+    expect(graph.hasDirectedEdge("core/lib.rs", "core/lib.rs")).toBe(false);
   });
 
-  test("gives every node finite coordinates", () => {
+  test("sizes files by how much the rest of the code leans on them", () => {
+    const hub = snapshot(
+      [["lib/core.ts", "typescript"], ["a.ts", "typescript"], ["b.ts", "typescript"], ["c.ts", "typescript"]],
+      [["a.ts", "lib/core.ts"], ["b.ts", "lib/core.ts"], ["c.ts", "lib/core.ts"]],
+    );
+    const sized = snapshotToGraph(hub, new Map());
+    expect(sized.getNodeAttribute("lib/core.ts", "size")).toBeGreaterThan(sized.getNodeAttribute("a.ts", "size"));
+  });
+
+  test("gives every node finite coordinates and is deterministic", () => {
     graph.forEachNode((_, attributes) => {
       expect(Number.isFinite(attributes.x)).toBe(true);
       expect(Number.isFinite(attributes.y)).toBe(true);
     });
-  });
-
-  test("is deterministic for the same snapshot", () => {
     expect(readPositions(snapshotToGraph(base, new Map()))).toEqual(readPositions(graph));
   });
 
-  test("restores stored positions exactly and places the rest itself", () => {
-    const restored = snapshotToGraph(base, new Map([["src/a.ts", { x: 5, y: -7 }]]));
-    expect(restored.getNodeAttributes("src/a.ts").x).toBe(5);
-    expect(restored.getNodeAttributes("src/a.ts").y).toBe(-7);
-    expect(restored.getNodeAttributes("src/b.ts").x).toBe(initialPosition("src/b.ts").x);
+  test("restores stored positions exactly, including folders", () => {
+    const restored = snapshotToGraph(
+      base,
+      new Map([
+        ["src/a.ts", { x: 5, y: -7 }],
+        [folderId("src"), { x: 1, y: 2 }],
+      ]),
+    );
+    expect(restored.getNodeAttributes("src/a.ts")).toMatchObject({ x: 5, y: -7 });
+    expect(restored.getNodeAttributes(folderId("src"))).toMatchObject({ x: 1, y: 2 });
   });
 
-  test("starts files of one folder next to each other", () => {
-    const a = initialPosition("src/features/chat/a.ts");
-    const b = initialPosition("src/features/chat/b.ts");
-    expect(Math.hypot(a.x - b.x, a.y - b.y)).toBeLessThanOrEqual(FILE_SPREAD_RADIUS * 2);
+  test("starts the files of a folder around its hub", () => {
+    const hub = graph.getNodeAttributes(folderId("src"));
+    const other = graph.getNodeAttributes(folderId("core"));
+    const file = graph.getNodeAttributes("src/a.ts");
+    expect(Math.hypot(file.x - hub.x, file.y - hub.y)).toBeLessThan(Math.hypot(file.x - other.x, file.y - other.y));
+  });
+
+  test("rejects a file id that collides with the folder namespace", () => {
+    expect(() => snapshotToGraph(snapshot([[folderId("x"), "typescript"]]), new Map())).toThrow("collides");
   });
 });
 
-describe("diffSnapshots", () => {
-  test("treats the first snapshot as all additions", () => {
-    const diff = diffSnapshots(null, base);
-    expect(diff.addedNodes).toHaveLength(3);
-    expect(diff.addedEdges).toHaveLength(2);
-    expect(diff.removedNodes).toEqual([]);
-    expect(diff.removedEdges).toEqual([]);
-  });
-
-  test("is empty for identical snapshots", () => {
-    expect(isEmptyDiff(diffSnapshots(base, structuredClone(base)))).toBe(true);
-  });
-
-  test("reports added and removed nodes and edges separately", () => {
-    const next = snapshot(
-      [
-        ["src/a.ts", "typescript"],
-        ["src/new.py", "python"],
-      ],
-      [["src/a.ts", "src/new.py"]],
-    );
-    const diff = diffSnapshots(base, next);
-    expect(diff.addedNodes.map((node) => node.id)).toEqual(["src/new.py"]);
-    expect([...diff.removedNodes].sort()).toEqual(["core/lib.rs", "src/b.ts"]);
-    expect(diff.addedEdges).toEqual([{ source: "src/a.ts", target: "src/new.py" }]);
-    expect(diff.removedEdges.map(edgeKey)).toContain(edgeKey({ source: "src/a.ts", target: "src/b.ts" }));
-  });
-
-  test("distinguishes edge direction", () => {
-    const reversed = snapshot(
-      [
-        ["x.ts", "typescript"],
-        ["y.ts", "typescript"],
-      ],
-      [["y.ts", "x.ts"]],
-    );
-    const original = snapshot(reversed.nodes.map((node) => [node.id, node.language] as const), [["x.ts", "y.ts"]]);
-    const diff = diffSnapshots(original, reversed);
-    expect(diff.addedEdges).toHaveLength(1);
-    expect(diff.removedEdges).toHaveLength(1);
-  });
-});
-
-describe("applyDiff", () => {
+describe("syncGraph", () => {
   test("applying the diff to the old graph yields the new graph", () => {
     const next = snapshot(
       [
@@ -137,76 +122,85 @@ describe("applyDiff", () => {
       ],
     );
     const graph = snapshotToGraph(base, new Map());
-    applyDiff(graph, diffSnapshots(base, next), new Map());
+    syncGraph(graph, next, diffSnapshots(base, next), new Map());
     const expected = snapshotToGraph(next, new Map());
     expect(graph.nodes().sort()).toEqual(expected.nodes().sort());
-    expect(graph.edges().map((edge) => `${graph.source(edge)}>${graph.target(edge)}`).sort()).toEqual(
-      expected.edges().map((edge) => `${expected.source(edge)}>${expected.target(edge)}`).sort(),
-    );
+    expect(edgeList(graph)).toEqual(edgeList(expected));
   });
 
   test("keeps existing nodes where they are", () => {
     const graph = snapshotToGraph(base, new Map([["src/a.ts", { x: 42, y: 24 }]]));
     const next = snapshot([...base.nodes.map((node) => [node.id, node.language] as const), ["src/z.ts", "typescript"]]);
-    applyDiff(graph, diffSnapshots(base, next), new Map());
-    expect(graph.getNodeAttributes("src/a.ts").x).toBe(42);
-    expect(graph.getNodeAttributes("src/a.ts").y).toBe(24);
+    syncGraph(graph, next, diffSnapshots(base, next), new Map());
+    expect(graph.getNodeAttributes("src/a.ts")).toMatchObject({ x: 42, y: 24 });
   });
 
-  test("places a new file next to the files it is connected to", () => {
+  test("places a new file next to the files it imports", () => {
     const graph = snapshotToGraph(base, new Map([["src/a.ts", { x: 500, y: 500 }]]));
     const next: GraphSnapshot = {
       ...base,
-      nodes: [...base.nodes, { id: "src/new.ts", language: "typescript" }],
-      edges: [...base.edges, { source: "src/new.ts", target: "src/a.ts" }],
+      nodes: [...base.nodes, { id: "core/new.ts", language: "typescript" }],
+      edges: [...base.edges, { source: "core/new.ts", target: "src/a.ts" }],
     };
-    applyDiff(graph, diffSnapshots(base, next), new Map());
-    const placed = graph.getNodeAttributes("src/new.ts");
-    expect(Math.hypot(placed.x - 500, placed.y - 500)).toBeLessThan(10);
+    syncGraph(graph, next, diffSnapshots(base, next), new Map());
+    const placed = graph.getNodeAttributes("core/new.ts");
+    expect(Math.hypot(placed.x - 500, placed.y - 500)).toBeLessThan(20);
   });
 
-  test("drops edges together with their removed nodes", () => {
+  test("places an unconnected new file next to its folder hub", () => {
+    const graph = snapshotToGraph(base, new Map([[folderId("src"), { x: -300, y: 80 }]]));
+    const next = snapshot([...base.nodes.map((node) => [node.id, node.language] as const), ["src/lonely.ts", "typescript"]]);
+    syncGraph(graph, next, diffSnapshots(base, next), new Map());
+    const placed = graph.getNodeAttributes("src/lonely.ts");
+    expect(Math.hypot(placed.x + 300, placed.y - 80)).toBeLessThan(20);
+  });
+
+  test("drops removed files, their edges and the folders left empty", () => {
     const graph = snapshotToGraph(base, new Map());
     const next = snapshot([["src/a.ts", "typescript"]]);
-    applyDiff(graph, diffSnapshots(base, next), new Map());
-    expect(graph.nodes()).toEqual(["src/a.ts"]);
-    expect(graph.size).toBe(0);
+    syncGraph(graph, next, diffSnapshots(base, next), new Map());
+    expect(graph.hasNode("src/b.ts")).toBe(false);
+    expect(graph.hasNode(folderId("core"))).toBe(false);
+    expect(graph.hasNode(folderId("src"))).toBe(true);
+    expect([...graph.edges()].some((edge) => graph.getEdgeAttribute(edge, "kind") === "import")).toBe(false);
   });
 
-  test("removes a lone edge without touching its endpoints", () => {
+  test("removes a lone import without touching its endpoints", () => {
     const graph = snapshotToGraph(base, new Map());
     const next = { ...base, edges: [] };
-    applyDiff(graph, diffSnapshots(base, next), new Map());
-    expect(graph.order).toBe(3);
-    expect(graph.size).toBe(0);
+    syncGraph(graph, next, diffSnapshots(base, next), new Map());
+    expect(graph.hasNode("src/a.ts")).toBe(true);
+    expect(graph.hasDirectedEdge("src/a.ts", "src/b.ts")).toBe(false);
+    expect(graph.hasDirectedEdge(folderId("src"), "src/a.ts")).toBe(true);
   });
 
   test("tolerates duplicate additions and edges to unknown files", () => {
     const graph = createCodeGraph();
-    const diff = {
-      addedNodes: [{ id: "a.ts", language: "typescript" as const }],
-      removedNodes: ["missing.ts"],
-      addedEdges: [
-        { source: "a.ts", target: "ghost.ts" },
-        { source: "a.ts", target: "a.ts" },
-      ],
-      removedEdges: [{ source: "x", target: "y" }],
-    };
-    applyDiff(graph, diff, new Map());
-    applyDiff(graph, { ...diff, addedNodes: diff.addedNodes }, new Map());
-    expect(graph.order).toBe(1);
-    expect(graph.size).toBe(0);
-  });
-
-  test("positionNear falls back to the folder position without neighbours", () => {
-    expect(positionNear("src/a.ts", [])).toEqual(initialPosition("src/a.ts"));
+    const next = snapshot([["a.ts", "typescript"]], [["a.ts", "ghost.ts"]]);
+    const diff = diffSnapshots(null, next);
+    syncGraph(graph, next, diff, new Map());
+    syncGraph(graph, next, diff, new Map());
+    expect(graph.order).toBe(2);
+    expect([...graph.edges()].filter((edge) => graph.getEdgeAttribute(edge, "kind") === "import")).toHaveLength(0);
   });
 });
 
 describe("displayNode", () => {
   test("keeps the layout position under the reducer's style", () => {
-    const data: NodeAttrs = { x: 12, y: -3, size: 4, label: "a.ts", language: "typescript", dirKey: "src" };
-    const style = { color: "#fff", size: 9, label: "a.ts", zIndex: 1, forceLabel: false, highlighted: false };
+    const data: NodeAttrs = {
+      x: 12,
+      y: -3,
+      size: 4,
+      label: "a.ts",
+      kind: "file",
+      language: "typescript",
+      role: "code",
+      hub: "src",
+      folder: "src",
+      files: 0,
+      importance: 0,
+    };
+    const style = { color: "#fff", size: 9, label: "a.ts", zIndex: 1, hidden: false };
     expect(displayNode(data, style)).toMatchObject({ x: 12, y: -3, size: 9, color: "#fff" });
   });
 });

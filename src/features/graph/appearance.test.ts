@@ -1,10 +1,11 @@
 import { describe, expect, test } from "bun:test";
 
 import {
-  edgeStyle,
-  MAX_NODE_SIZE,
-  MIN_NODE_SIZE,
-  nodeSize,
+  DUST_MIX,
+  FILES_LEVEL_HUB_SCALE,
+  FOCUS_DIM_MIX,
+  RECEDE_MIX,
+  folderColor,
   nodeStyle,
   type AppearanceContext,
   type NodeInfo,
@@ -13,10 +14,12 @@ import { mixColors, parseHex } from "./color-math";
 import { nodeBrightness, TWINKLE_MS } from "./activity-math";
 import { activityColor } from "./activity-palette";
 import type { NodeActivity } from "./activity-state";
+import { DUST_SIZE, growthCeiling, sizeScale } from "./node-scale";
 import { fixtureActivityPalette, fixturePalette } from "./palette-fixture";
 
 const palette = fixturePalette();
 const activityColors = fixtureActivityPalette();
+const scale = sizeScale(100, 20);
 
 function depthColor(index: number): string {
   const color = palette.blastDepths[index];
@@ -34,25 +37,38 @@ function context(overrides: Partial<AppearanceContext> = {}): AppearanceContext 
   return {
     palette,
     colorBy: "language",
+    level: "files",
     blast: null,
     activityColors,
     activity: { nodes: new Map() },
     now: 10_000,
     reducedMotion: false,
     focus: null,
+    selected: null,
+    scale,
+    edgeAlpha: 0.3,
+    arrows: true,
     ...overrides,
   };
 }
 
 function node(id: string, overrides: Partial<NodeInfo> = {}): NodeInfo {
+  const folder = id.split("/").slice(0, -1).join("/");
   return {
     id,
+    kind: "file",
     label: id.slice(id.lastIndexOf("/") + 1),
     language: "typescript",
-    dirKey: id.split("/").slice(0, -1).join("/"),
-    inDegree: 0,
+    role: "code",
+    hub: folder,
+    folder,
+    size: 5,
     ...overrides,
   };
+}
+
+function hub(path: string, overrides: Partial<NodeInfo> = {}): NodeInfo {
+  return node(`\u0000folder:${path}`, { kind: "folder", language: null, folder: path, hub: path, size: 6, label: path, ...overrides });
 }
 
 const blast = {
@@ -65,72 +81,102 @@ const blast = {
   ]),
 };
 
-describe("nodeSize", () => {
-  test("grows with the number of importers inside fixed bounds", () => {
-    expect(nodeSize(0)).toBe(MIN_NODE_SIZE);
-    expect(nodeSize(4)).toBeGreaterThan(nodeSize(1));
-    expect(nodeSize(10_000)).toBe(MAX_NODE_SIZE);
+const resting = (color: string) => mixColors(color, palette.background, RECEDE_MIX);
+
+describe("colour", () => {
+  test("by language uses a calm version of the language colour", () => {
+    expect(nodeStyle(node("a.rs", { language: "rust" }), context()).color).toBe(resting(palette.language.rust));
+    expect(nodeStyle(node("a.py", { language: "python" }), context()).color).toBe(resting(palette.language.python));
+  });
+
+  test("by role uses the role colour", () => {
+    const style = nodeStyle(node("src/ui/a.tsx", { role: "frontend" }), context({ colorBy: "role" }));
+    expect(style.color).toBe(resting(palette.roles.frontend));
+  });
+
+  test("by folder gives one colour per hub, drawn from the folder palette", () => {
+    const one = nodeStyle(node("src/ui/a.ts", { hub: "src/ui" }), context({ colorBy: "directory" })).color;
+    const same = nodeStyle(node("src/ui/b.ts", { hub: "src/ui" }), context({ colorBy: "directory" })).color;
+    expect(same).toBe(one);
+    expect(one).toBe(resting(folderColor(palette, "src/ui")));
+  });
+
+  test("nodes recede into the background compared with the raw palette colour", () => {
+    const raw = palette.language.typescript;
+    expect(distance(nodeStyle(node("src/a.ts"), context()).color, palette.background)).toBeLessThan(distance(raw, palette.background));
   });
 });
 
-describe("colour", () => {
-  test("by language uses the language token colour", () => {
-    expect(nodeStyle(node("a.rs", { language: "rust" }), context()).color).toBe(palette.language.rust);
-    expect(nodeStyle(node("a.py", { language: "python" }), context()).color).toBe(palette.language.python);
+describe("size", () => {
+  test("files keep their importance-based size at the files level", () => {
+    expect(nodeStyle(node("src/a.ts", { size: 7 }), context()).size).toBe(7);
   });
 
-  test("by directory gives one colour per folder, drawn from the directory palette", () => {
-    const one = nodeStyle(node("src/ui/a.ts"), context({ colorBy: "directory" })).color;
-    const same = nodeStyle(node("src/ui/b.ts"), context({ colorBy: "directory" })).color;
-    expect(same).toBe(one);
-    expect(palette.directories).toContain(one);
+  test("untouched files are dust in the overview", () => {
+    const style = nodeStyle(node("src/a.ts", { size: 7 }), context({ level: "overview" }));
+    expect(style.size).toBe(DUST_SIZE);
+    expect(style.color).toBe(mixColors(palette.language.typescript, palette.background, DUST_MIX));
   });
 
-  test("by directory separates languages that share a folder from the language scheme", () => {
-    const style = nodeStyle(node("src/a.rs", { language: "rust" }), context({ colorBy: "directory" }));
-    expect(palette.directories).toContain(style.color);
+  test("a selected, focused or touched file is a full node even in the overview", () => {
+    const selected = nodeStyle(node("src/a.ts", { size: 7 }), context({ level: "overview", selected: "src/a.ts" }));
+    expect(selected.size).toBe(7);
+    const focus = { node: "src/x.ts", neighbours: new Set(["src/a.ts"]) };
+    expect(nodeStyle(node("src/a.ts", { size: 7 }), context({ level: "overview", focus })).size).toBe(7);
+  });
+});
+
+describe("folder hubs", () => {
+  test("show only for hubs", () => {
+    expect(nodeStyle(hub("src"), context()).hidden).toBe(false);
+    expect(nodeStyle(hub("src/deep/er", { hub: "src" }), context()).hidden).toBe(true);
+  });
+
+  test("are tinted by role, left neutral when colouring by language, and shrink at the files level", () => {
+    const byRole = nodeStyle(hub("src", { role: "api" }), context({ colorBy: "role", level: "overview" }));
+    expect(distance(byRole.color, palette.roles.api)).toBeLessThan(distance(palette.roles.api, palette.background));
+    const neutral = nodeStyle(hub("src", { role: "api" }), context({ colorBy: "language", level: "overview" }));
+    expect(distance(neutral.color, palette.labelDim)).toBeLessThan(distance(neutral.color, palette.roles.api));
+    expect(nodeStyle(hub("src"), context({ level: "files" })).size).toBeCloseTo(6 * FILES_LEVEL_HUB_SCALE);
+    expect(nodeStyle(hub("src"), context({ level: "overview" })).size).toBe(6);
+  });
+
+  test("dim when something else is hovered", () => {
+    const focus = { node: "other", neighbours: new Set<string>() };
+    expect(nodeStyle(hub("src"), context({ focus })).color).not.toBe(nodeStyle(hub("src"), context()).color);
   });
 });
 
 describe("blast radius highlighting", () => {
   const ctx = context({ blast });
 
-  test("the origin uses the accent and is labelled", () => {
-    const style = nodeStyle(node("src/leaf.ts"), ctx);
-    expect(style.color).toBe(palette.blastOrigin);
-    expect(style.forceLabel).toBe(true);
-    expect(style.highlighted).toBe(true);
+  test("the origin uses the accent", () => {
+    expect(nodeStyle(node("src/leaf.ts"), ctx).color).toBe(mixColors(palette.blastOrigin, palette.background, RECEDE_MIX));
   });
 
   test("dependents are coloured by depth and clamp beyond the ramp", () => {
-    expect(nodeStyle(node("src/mid.ts"), ctx).color).toBe(depthColor(0));
-    expect(nodeStyle(node("src/top.ts"), ctx).color).toBe(depthColor(1));
-    expect(nodeStyle(node("src/far.ts"), ctx).color).toBe(depthColor(2));
-    expect(nodeStyle(node("src/farther.ts"), ctx).color).toBe(depthColor(2));
+    const expected = (index: number) => mixColors(depthColor(index), palette.background, RECEDE_MIX);
+    expect(nodeStyle(node("src/mid.ts"), ctx).color).toBe(expected(0));
+    expect(nodeStyle(node("src/top.ts"), ctx).color).toBe(expected(1));
+    expect(nodeStyle(node("src/far.ts"), ctx).color).toBe(expected(2));
+    expect(nodeStyle(node("src/farther.ts"), ctx).color).toBe(expected(2));
   });
 
   test("everything else is dimmed behind the highlighted files", () => {
     const outside = nodeStyle(node("src/unrelated.ts"), ctx);
     const inside = nodeStyle(node("src/mid.ts"), ctx);
-    expect(outside.color).toBe(palette.dim);
-    expect(outside.zIndex).toBeLessThan(inside.zIndex);
+    expect(outside.color).toBe(resting(palette.dim));
+    expect(outside.zIndex).toBeLessThanOrEqual(inside.zIndex);
   });
 
   test("keeps normal colours while the radius is still being computed", () => {
     const loading = context({ blast: { origin: "src/leaf.ts", depths: null } });
-    expect(nodeStyle(node("src/unrelated.ts"), loading).color).toBe(palette.language.typescript);
+    expect(nodeStyle(node("src/unrelated.ts"), loading).color).toBe(resting(palette.language.typescript));
   });
 
-  test("only edges that lead a dependent one step closer to the origin are highlighted", () => {
-    const tree = edgeStyle("src/mid.ts", "src/leaf.ts", ctx);
-    const next = edgeStyle("src/top.ts", "src/mid.ts", ctx);
-    const sideways = edgeStyle("src/top.ts", "src/far.ts", ctx);
-    const unrelated = edgeStyle("src/x.ts", "src/y.ts", ctx);
-    expect(tree.color).toBe(depthColor(0));
-    expect(next.color).toBe(depthColor(1));
-    expect(sideways.color).not.toBe(depthColor(1));
-    expect(unrelated.size).toBeLessThan(tree.size);
-    expect(tree.zIndex).toBeGreaterThan(unrelated.zIndex);
+  test("shows the files in a blast even in the overview", () => {
+    const style = nodeStyle(node("src/mid.ts", { size: 7 }), context({ blast, level: "overview" }));
+    expect(style.size).toBe(7);
   });
 });
 
@@ -139,26 +185,16 @@ describe("hover focus", () => {
   const ctx = context({ focus });
 
   test("keeps the hovered node and its neighbours at full colour and dims the rest", () => {
-    expect(nodeStyle(node("src/a.ts"), ctx).color).toBe(palette.language.typescript);
-    expect(nodeStyle(node("src/b.ts"), ctx).color).toBe(palette.language.typescript);
+    expect(nodeStyle(node("src/a.ts"), ctx).color).toBe(resting(palette.language.typescript));
+    expect(nodeStyle(node("src/b.ts"), ctx).color).toBe(resting(palette.language.typescript));
     const far = nodeStyle(node("src/far.ts"), ctx);
-    expect(far.color).not.toBe(palette.language.typescript);
+    expect(far.color).toBe(mixColors(resting(palette.language.typescript), palette.background, FOCUS_DIM_MIX));
     expect(far.zIndex).toBe(0);
-  });
-
-  test("labels and highlights only the hovered node", () => {
-    expect(nodeStyle(node("src/a.ts"), ctx).forceLabel).toBe(true);
-    expect(nodeStyle(node("src/b.ts"), ctx).forceLabel).toBe(false);
-  });
-
-  test("emphasises edges that touch the hovered node", () => {
-    expect(edgeStyle("src/a.ts", "src/b.ts", ctx).color).toBe(palette.edgeActive);
-    expect(edgeStyle("src/x.ts", "src/y.ts", ctx).size).toBeLessThan(edgeStyle("src/a.ts", "src/b.ts", ctx).size);
   });
 
   test("does not dim anything in blast mode", () => {
     const withBlast = context({ focus, blast });
-    expect(nodeStyle(node("src/mid.ts"), withBlast).color).toBe(depthColor(0));
+    expect(nodeStyle(node("src/mid.ts"), withBlast).color).toBe(mixColors(depthColor(0), palette.background, RECEDE_MIX));
   });
 });
 
@@ -167,25 +203,13 @@ describe("agent activity heat", () => {
   const base = nodeStyle(node("src/a.ts"), context());
 
   function activity(overrides: Partial<NodeActivity> = {}): NodeActivity {
-    return {
-      reads: 0,
-      edits: 1,
-      linesChanged: 0,
-      lastKind: "edit",
-      lastTouchedAt: touchedAt,
-      changedTurn: null,
-      ...overrides,
-    };
+    return { reads: 0, edits: 1, linesChanged: 0, lastKind: "edit", lastTouchedAt: touchedAt, changedTurn: null, ...overrides };
   }
 
   function heated(elapsed: number, overrides: Partial<NodeActivity> = {}, extra: Partial<AppearanceContext> = {}) {
     return nodeStyle(
       node("src/a.ts"),
-      context({
-        now: touchedAt + elapsed,
-        activity: { nodes: new Map([["src/a.ts", activity(overrides)]]) },
-        ...extra,
-      }),
+      context({ now: touchedAt + elapsed, activity: { nodes: new Map([["src/a.ts", activity(overrides)]]) }, ...extra }),
     );
   }
 
@@ -215,7 +239,7 @@ describe("agent activity heat", () => {
     expect(heated(60_000).color).toBe(mixColors(base.color, tint, nodeBrightness(60_000, false)));
   });
 
-  test("grows with edits, reads and lines changed, relative to the in-degree size", () => {
+  test("grows with edits, reads and lines changed, relative to the resting size", () => {
     const plain = heated(0, { edits: 0, reads: 0 });
     const edited = heated(0, { edits: 3, linesChanged: 100 });
     expect(plain.size).toBe(base.size);
@@ -223,21 +247,14 @@ describe("agent activity heat", () => {
     expect(heated(0, { edits: 0, reads: 4 }).size).toBeCloseTo(base.size + 1, 5);
   });
 
-  test("never outgrows the maximum node size", () => {
-    expect(heated(0, { edits: 500, linesChanged: 1_000_000 }).size).toBe(MAX_NODE_SIZE);
-    const hub = nodeStyle(
-      node("src/a.ts", { inDegree: 100 }),
-      context({ activity: { nodes: new Map([["src/a.ts", activity({ edits: 9 })]]) } }),
-    );
-    expect(hub.size).toBe(MAX_NODE_SIZE);
+  test("never outgrows the growth ceiling", () => {
+    expect(heated(0, { edits: 500, linesChanged: 1_000_000 }).size).toBe(growthCeiling(scale));
   });
 
-  test("forces a label and lifts the node only while it twinkles", () => {
+  test("lifts the node only while it twinkles, and above anything merely touched", () => {
     const hot = heated(1000);
     const cool = heated(TWINKLE_MS + 1);
-    expect(hot.forceLabel).toBe(true);
     expect(hot.zIndex).toBeGreaterThan(cool.zIndex);
-    expect(cool.forceLabel).toBe(false);
     expect(cool.zIndex).toBeGreaterThan(base.zIndex);
   });
 
@@ -252,7 +269,7 @@ describe("agent activity heat", () => {
       node("src/mid.ts"),
       context({ blast, now: touchedAt, activity: { nodes: new Map([["src/mid.ts", activity({ edits: 2 })]]) } }),
     );
-    expect(style.color).toBe(depthColor(0));
+    expect(style.color).toBe(mixColors(depthColor(0), palette.background, RECEDE_MIX));
     expect(style.size).toBeGreaterThan(nodeStyle(node("src/mid.ts"), context({ blast })).size);
   });
 
@@ -263,12 +280,12 @@ describe("agent activity heat", () => {
     expect(dimmedPlain.zIndex).toBe(0);
     expect(hot.zIndex).toBe(3);
   });
-});
 
-describe("default edges", () => {
-  test("are faint and thin until something is focused", () => {
-    const style = edgeStyle("src/a.ts", "src/b.ts", context());
-    expect(style.size).toBeLessThan(1);
-    expect(style.color.startsWith("rgba(")).toBe(true);
+  test("a touched file stands out in the overview instead of fading into dust", () => {
+    const style = nodeStyle(
+      node("src/a.ts"),
+      context({ level: "overview", now: touchedAt, activity: { nodes: new Map([["src/a.ts", activity()]]) } }),
+    );
+    expect(style.size).toBeGreaterThan(DUST_SIZE);
   });
 });

@@ -1,20 +1,21 @@
 import { grownSize, isTwinkling, nodeBrightness } from "./activity-math";
 import { activityColor, type ActivityPalette } from "./activity-palette";
 import type { ActivityState, NodeActivity } from "./activity-state";
-import { mixColors, withAlpha } from "./color-math";
-import type { BlastState, ColorBy } from "./graph-store";
+import { mixColors } from "./color-math";
+import type { NodeKind } from "./graph-model";
+import type { BlastState, ColorBy, GraphLevel } from "./graph-store";
 import { hashString } from "./graph-paths";
 import type { Language } from "./graph-types";
+import { DUST_SIZE, growthCeiling, type SizeScale } from "./node-scale";
 import type { Palette } from "./palette";
+import type { Role } from "./roles";
 
-export const MIN_NODE_SIZE = 3;
-export const MAX_NODE_SIZE = 11;
-const SIZE_PER_ROOT_DEGREE = 1.4;
-const FOCUS_DIM_MIX = 0.65;
-const OUTSIDE_EDGE_ALPHA = 0.18;
-const DEFAULT_EDGE_ALPHA = 0.55;
-const EDGE_SIZE = 0.6;
-const ACTIVE_EDGE_SIZE = 1.6;
+export const FOCUS_DIM_MIX = 0.72;
+const HUB_DIM_MIX = 0.55;
+export const RECEDE_MIX = 0.16;
+export const DUST_MIX = 0.42;
+const HUB_RECEDE_MIX = 0.08;
+export const FILES_LEVEL_HUB_SCALE = 0.72;
 
 export interface Focus {
   readonly node: string;
@@ -25,19 +26,29 @@ export interface AppearanceContext {
   readonly palette: Palette;
   readonly activityColors: ActivityPalette;
   readonly colorBy: ColorBy;
+  readonly level: GraphLevel;
   readonly blast: BlastState | null;
   readonly activity: Pick<ActivityState, "nodes">;
   readonly now: number;
   readonly reducedMotion: boolean;
   readonly focus: Focus | null;
+  readonly selected: string | null;
+  readonly scale: SizeScale;
+  /** Alpha for a resting import edge; thinner for dense graphs. */
+  readonly edgeAlpha: number;
+  /** Whether import edges carry arrowheads; they only help while the graph is small. */
+  readonly arrows: boolean;
 }
 
 export interface NodeInfo {
   readonly id: string;
+  readonly kind: NodeKind;
   readonly label: string;
-  readonly language: Language;
-  readonly dirKey: string;
-  readonly inDegree: number;
+  readonly language: Language | null;
+  readonly role: Role;
+  readonly hub: string;
+  readonly folder: string;
+  readonly size: number;
 }
 
 export interface NodeStyle {
@@ -45,14 +56,7 @@ export interface NodeStyle {
   size: number;
   label: string;
   zIndex: number;
-  forceLabel: boolean;
-  highlighted: boolean;
-}
-
-export interface EdgeStyle {
-  color: string;
-  size: number;
-  zIndex: number;
+  hidden: boolean;
 }
 
 export type BlastRole =
@@ -64,10 +68,6 @@ export type BlastRole =
 const INACTIVE: BlastRole = { kind: "inactive" };
 const ORIGIN: BlastRole = { kind: "origin" };
 const OUTSIDE: BlastRole = { kind: "outside" };
-
-export function nodeSize(inDegree: number): number {
-  return Math.min(MAX_NODE_SIZE, MIN_NODE_SIZE + Math.sqrt(inDegree) * SIZE_PER_ROOT_DEGREE);
-}
 
 export function blastRole(blast: BlastState | null, id: string): BlastRole {
   if (blast === null) return INACTIVE;
@@ -82,9 +82,16 @@ export function blastColor(palette: Palette, depth: number): string {
   return palette.blastDepths[index] ?? palette.dim;
 }
 
-function directoryColor(palette: Palette, dirKey: string): string {
-  const index = hashString(dirKey) % palette.directories.length;
+export function folderColor(palette: Palette, hub: string): string {
+  const index = hashString(hub) % palette.directories.length;
   return palette.directories[index] ?? palette.dim;
+}
+
+function groupColor(info: NodeInfo, ctx: AppearanceContext): string {
+  const { palette } = ctx;
+  if (ctx.colorBy === "directory") return folderColor(palette, info.hub);
+  if (ctx.colorBy === "language") return info.language === null ? palette.labelDim : palette.language[info.language];
+  return palette.roles[info.role];
 }
 
 function baseColor(info: NodeInfo, role: BlastRole, ctx: AppearanceContext): string {
@@ -96,9 +103,7 @@ function baseColor(info: NodeInfo, role: BlastRole, ctx: AppearanceContext): str
     case "outside":
       return ctx.palette.dim;
     case "inactive":
-      return ctx.colorBy === "language"
-        ? ctx.palette.language[info.language]
-        : directoryColor(ctx.palette, info.dirKey);
+      return groupColor(info, ctx);
   }
 }
 
@@ -106,66 +111,60 @@ function isOutOfFocus(id: string, focus: Focus | null): boolean {
   return focus !== null && focus.node !== id && !focus.neighbours.has(id);
 }
 
-function tintedColor(
-  info: NodeInfo,
-  role: BlastRole,
-  activity: NodeActivity | undefined,
-  ctx: AppearanceContext,
-): string {
-  const color = baseColor(info, role, ctx);
+function inFocus(id: string, focus: Focus | null): boolean {
+  return focus !== null && (focus.node === id || focus.neighbours.has(id));
+}
+
+function tintedColor(color: string, role: BlastRole, activity: NodeActivity | undefined, ctx: AppearanceContext): string {
   if (activity === undefined || role.kind !== "inactive") return color;
   const tint = activityColor(ctx.activityColors, activity.lastKind);
   return mixColors(color, tint, nodeBrightness(ctx.now - activity.lastTouchedAt, ctx.reducedMotion));
 }
 
-function restingZIndex(role: BlastRole, dimmed: boolean, activity: NodeActivity | undefined, hot: boolean): number {
-  if (role.kind === "outside" || dimmed) return 0;
-  if (hot) return 3;
-  return activity === undefined ? 1 : 2;
+function restingZIndex(info: NodeInfo, flags: { dimmed: boolean; hot: boolean; touched: boolean }): number {
+  if (flags.dimmed) return 0;
+  if (flags.hot) return 3;
+  if (flags.touched) return 2;
+  return 1 + Math.min(info.size / 24, 0.9);
 }
 
-export function nodeStyle(info: NodeInfo, ctx: AppearanceContext): NodeStyle {
+function isInvolved(info: NodeInfo, role: BlastRole, activity: NodeActivity | undefined, ctx: AppearanceContext): boolean {
+  if (activity !== undefined || ctx.selected === info.id || inFocus(info.id, ctx.focus)) return true;
+  return role.kind === "origin" || role.kind === "dependent";
+}
+
+function fileStyle(info: NodeInfo, ctx: AppearanceContext): NodeStyle {
   const role = blastRole(ctx.blast, info.id);
   const activity = ctx.activity.nodes.get(info.id);
   const hot = activity !== undefined && isTwinkling(ctx.now - activity.lastTouchedAt);
+  const dust = ctx.level === "overview" && !isInvolved(info, role, activity, ctx);
   const dimmed = role.kind === "inactive" && !hot && isOutOfFocus(info.id, ctx.focus);
-  const color = tintedColor(info, role, activity, ctx);
-  const focused = role.kind === "origin" || ctx.focus?.node === info.id;
-  const base = nodeSize(info.inDegree);
+  const recede = mixColors(baseColor(info, role, ctx), ctx.palette.background, dust ? DUST_MIX : RECEDE_MIX);
+  const color = tintedColor(recede, role, activity, ctx);
+  const base = dust ? DUST_SIZE : info.size;
   return {
     color: dimmed ? mixColors(color, ctx.palette.background, FOCUS_DIM_MIX) : color,
-    size: activity === undefined ? base : grownSize(base, activity, MAX_NODE_SIZE),
+    size: activity === undefined ? base : grownSize(base, activity, growthCeiling(ctx.scale)),
     label: info.label,
-    zIndex: restingZIndex(role, dimmed, activity, hot),
-    forceLabel: focused || hot,
-    highlighted: focused,
+    zIndex: restingZIndex(info, { dimmed, hot, touched: activity !== undefined || ctx.selected === info.id }),
+    hidden: false,
   };
 }
 
-function depthOf(role: BlastRole): number | null {
-  if (role.kind === "origin") return 0;
-  return role.kind === "dependent" ? role.depth : null;
+function folderStyle(info: NodeInfo, ctx: AppearanceContext): NodeStyle {
+  const isHub = info.hub === info.folder;
+  const dimmed = isOutOfFocus(info.id, ctx.focus);
+  const color = mixColors(groupColor(info, ctx), ctx.palette.background, HUB_RECEDE_MIX);
+  const size = ctx.level === "files" ? info.size * FILES_LEVEL_HUB_SCALE : info.size;
+  return {
+    color: dimmed ? mixColors(color, ctx.palette.background, HUB_DIM_MIX) : color,
+    size,
+    label: info.label,
+    zIndex: ctx.focus?.node === info.id ? 4 : 2,
+    hidden: !isHub,
+  };
 }
 
-function blastEdgeColor(source: BlastRole, target: BlastRole, palette: Palette): string | null {
-  if (source.kind !== "dependent") return null;
-  return depthOf(target) === source.depth - 1 ? blastColor(palette, source.depth) : null;
-}
-
-export function edgeStyle(source: string, target: string, ctx: AppearanceContext): EdgeStyle {
-  const { palette } = ctx;
-  const sourceRole = blastRole(ctx.blast, source);
-  if (sourceRole.kind !== "inactive") {
-    const color = blastEdgeColor(sourceRole, blastRole(ctx.blast, target), palette);
-    return color === null
-      ? { color: withAlpha(palette.edge, OUTSIDE_EDGE_ALPHA), size: EDGE_SIZE, zIndex: 0 }
-      : { color, size: ACTIVE_EDGE_SIZE, zIndex: 2 };
-  }
-  if (ctx.focus !== null) {
-    const touches = ctx.focus.node === source || ctx.focus.node === target;
-    return touches
-      ? { color: palette.edgeActive, size: ACTIVE_EDGE_SIZE, zIndex: 2 }
-      : { color: withAlpha(palette.edge, OUTSIDE_EDGE_ALPHA), size: EDGE_SIZE, zIndex: 0 };
-  }
-  return { color: withAlpha(palette.edge, DEFAULT_EDGE_ALPHA), size: EDGE_SIZE, zIndex: 1 };
+export function nodeStyle(info: NodeInfo, ctx: AppearanceContext): NodeStyle {
+  return info.kind === "folder" ? folderStyle(info, ctx) : fileStyle(info, ctx);
 }

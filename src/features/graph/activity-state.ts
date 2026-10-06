@@ -70,6 +70,8 @@ export interface ActivityState {
   readonly lastNodeId: string | null;
   readonly lastMoveAt: number | null;
   readonly turn: number;
+  /** Lines the agent has changed since the current turn began. */
+  readonly turnLines: number;
   readonly seq: number;
   readonly lastEvent: ActivityEvent | null;
 }
@@ -93,6 +95,7 @@ export function initialActivity(): ActivityState {
     lastNodeId: null,
     lastMoveAt: null,
     turn: 1,
+    turnLines: 0,
     seq: 0,
     lastEvent: null,
   };
@@ -148,6 +151,10 @@ function withTouchedNode(state: ActivityState, touch: Touch, now: number): Reado
   return next;
 }
 
+function changedLines(touch: Touch): number {
+  return touch.source === "agent" && isEditKind(touch.kind) ? touch.linesChanged : 0;
+}
+
 export function recordTouch(state: ActivityState, touch: Touch, now: number): ActivityState {
   const moves = movesComet(state, touch, now);
   const seq = state.seq + 1;
@@ -160,6 +167,7 @@ export function recordTouch(state: ActivityState, touch: Touch, now: number): Ac
     current: moves ? { kind: touch.kind, subject: touch.subject } : state.current,
     lastNodeId: landed ?? state.lastNodeId,
     lastMoveAt: moves ? now : state.lastMoveAt,
+    turnLines: state.turnLines + changedLines(touch),
     seq,
     lastEvent: {
       type: "touch",
@@ -182,7 +190,7 @@ export function applyStatus(state: ActivityState, status: AgentStatus, now: numb
 }
 
 export function beginTurn(state: ActivityState): ActivityState {
-  return { ...state, turn: state.turn + 1 };
+  return { ...state, turn: state.turn + 1, turnLines: 0 };
 }
 
 export function isChangedThisTurn(activity: NodeActivity, turn: number): boolean {
@@ -197,6 +205,13 @@ function describeAction(action: CurrentAction | null): string {
   if (action === null) return "Working";
   const verb = VERBS[action.kind];
   return action.subject === null ? verb : `${verb} · ${truncate(action.subject)}`;
+}
+
+/** Reading and thinking look like exploring; changing things is the agent at work. */
+export function agentTone(status: AgentStatus, current: CurrentAction | null): "agent" | "explore" {
+  if (status === "thinking") return "explore";
+  const reading = current?.kind === "read" || current?.kind === "search";
+  return status === "working" && reading ? "explore" : "agent";
 }
 
 export function agentLabel(status: AgentStatus, current: CurrentAction | null): string | null {

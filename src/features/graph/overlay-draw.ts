@@ -10,6 +10,10 @@ const COMET_HALO_ALPHA = 0.55;
 const PARTICLE_GLOW_RADIUS = 9;
 const PARTICLE_CORE_RADIUS = 2.4;
 const PATH_DASH: readonly number[] = [6, 6];
+const ARC_DASH: readonly number[] = [7, 6];
+const ARC_LINE_WIDTH = 1.3;
+const ARC_ALPHA = 0.72;
+const SELECTION_DASH: readonly number[] = [3, 3];
 const PATH_LINE_WIDTH = 1.2;
 const CHANGED_RING_WIDTH = 1;
 const PILL_PADDING_X = 8;
@@ -110,6 +114,35 @@ export function drawPathSegment(
   context.moveTo(segment.from.x, segment.from.y);
   context.lineTo(segment.to.x, segment.to.y);
   context.stroke();
+  context.setLineDash([]);
+}
+
+export interface ArcShape {
+  from: Point;
+  to: Point;
+  control: Point;
+  color: string;
+  dashOffset: number;
+}
+
+/** A dashed curve whose dashes travel from its start to its end as the offset falls. */
+export function drawArc(context: Pen, arc: ArcShape): void {
+  context.setLineDash([...ARC_DASH]);
+  context.lineDashOffset = arc.dashOffset;
+  context.lineWidth = ARC_LINE_WIDTH;
+  context.lineCap = "butt";
+  context.strokeStyle = withAlpha(arc.color, ARC_ALPHA);
+  context.beginPath();
+  context.moveTo(arc.from.x, arc.from.y);
+  context.quadraticCurveTo(arc.control.x, arc.control.y, arc.to.x, arc.to.y);
+  context.stroke();
+  context.setLineDash([]);
+}
+
+export function drawSelectionRing(context: Pen, center: Point, radius: number, color: string): void {
+  context.setLineDash([...SELECTION_DASH]);
+  context.lineDashOffset = 0;
+  drawRing(context, { ...center, radius, width: 1.2, alpha: 0.9, color });
   context.setLineDash([]);
 }
 

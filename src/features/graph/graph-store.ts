@@ -23,7 +23,8 @@ import type { Point } from "./placement";
 
 export type GraphStatus = "idle" | "loading" | "ready" | "error";
 export type GraphMode = "explore" | "blast";
-export type ColorBy = "language" | "directory";
+export type ColorBy = "role" | "language" | "directory";
+export type GraphLevel = "overview" | "files";
 
 export interface BlastState {
   readonly origin: string;
@@ -40,6 +41,8 @@ export interface GraphData {
   camera: CameraPrefs;
   mode: GraphMode;
   colorBy: ColorBy;
+  level: GraphLevel;
+  selected: string | null;
   blast: BlastState | null;
   positions: ReadonlyMap<string, Point>;
 }
@@ -56,6 +59,8 @@ export interface GraphActions {
   toggleFollow: () => void;
   setMode: (mode: GraphMode) => void;
   setColorBy: (colorBy: ColorBy) => void;
+  setLevel: (level: GraphLevel) => void;
+  select: (id: string | null) => void;
   inspectBlast: (path: string) => Promise<void>;
   savePositions: (positions: ReadonlyMap<string, Point>) => void;
   reportFailure: (error: unknown) => void;
@@ -96,7 +101,9 @@ function initialData(): GraphData {
     activity: initialActivity(),
     camera: INITIAL_CAMERA,
     mode: "explore",
-    colorBy: "language",
+    colorBy: "role",
+    level: "overview",
+    selected: null,
     blast: null,
     positions: new Map(),
   };
@@ -106,10 +113,12 @@ function describeError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-function snapshotPatch(snapshot: GraphSnapshot): Partial<GraphData> {
+function snapshotPatch(snapshot: GraphSnapshot, selected: string | null): Partial<GraphData> {
+  const resolver = createNodeResolver(snapshot.nodes.map((node) => node.id));
   return {
     snapshot,
-    resolver: createNodeResolver(snapshot.nodes.map((node) => node.id)),
+    resolver,
+    selected: selected === null ? null : resolver.resolve(selected),
     status: "ready",
     error: null,
   };
@@ -122,12 +131,13 @@ function toDepthMap(radius: BlastRadius): ReadonlyMap<string, number> {
 async function runBuild(context: Context, root: string, keepView: boolean): Promise<void> {
   context.builds.current += 1;
   const token = context.builds.current;
-  const reset = keepView ? {} : { ...initialData(), mode: context.get().mode, colorBy: context.get().colorBy };
+  const { mode, colorBy, level } = context.get();
+  const reset = keepView ? {} : { ...initialData(), mode, colorBy, level };
   context.set({ ...reset, root, status: "loading", error: null });
   try {
     const snapshot = await context.api.build(root);
     if (token !== context.builds.current) return;
-    context.set(snapshotPatch(snapshot));
+    context.set(snapshotPatch(snapshot, context.get().selected));
     await refreshBlast(context);
   } catch (error) {
     if (token === context.builds.current) {
@@ -162,7 +172,7 @@ async function refreshOnce(context: Context): Promise<void> {
   try {
     const snapshot = await context.api.snapshot();
     if (token !== context.builds.current) return;
-    context.set(snapshotPatch(snapshot));
+    context.set(snapshotPatch(snapshot, context.get().selected));
     await refreshBlast(context);
   } catch (error) {
     if (token === context.builds.current) {
@@ -260,6 +270,12 @@ export function createGraphStore(deps: GraphDeps): GraphStore {
       },
       setColorBy: (colorBy) => {
         set({ colorBy });
+      },
+      setLevel: (level) => {
+        set({ level });
+      },
+      select: (id) => {
+        set({ selected: id });
       },
       inspectBlast: (path) => runBlast(context, path),
       savePositions: (positions) => {

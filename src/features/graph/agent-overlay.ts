@@ -2,12 +2,14 @@ import { isTwinkling, TWINKLE_MS, twinkleFactor } from "./activity-math";
 import { activityColor, type ActivityPalette } from "./activity-palette";
 import {
   agentLabel,
+  agentTone,
   isChangedThisTurn,
   type ActivityEvent,
   type ActivityState,
   type FinishActivity,
   type TouchActivity,
 } from "./activity-state";
+import { arcControl, arcTargets, ARC_FLOW_PX_PER_MS } from "./arcs";
 import { drawHalo, type Pen } from "./canvas-draw";
 import { isCometAnimating, placePill, stepComet, trailSegments, type CometState } from "./comet";
 import { withAlpha } from "./color-math";
@@ -26,12 +28,14 @@ import {
 import type { CodeGraph } from "./graph-model";
 import type { GraphStore } from "./graph-store";
 import {
+  drawArc,
   drawChangedRing,
   drawCometHead,
   drawParticle,
   drawPathSegment,
   drawPill,
   drawRing,
+  drawSelectionRing,
   drawTrail,
   measurePill,
 } from "./overlay-draw";
@@ -39,11 +43,11 @@ import type { Palette } from "./palette";
 import type { Point } from "./placement";
 
 const AGENT_NAME = "Claude";
+const EXPLORE_NAME = "Explore";
 const PATH_PEAK_ALPHA = 0.55;
 const PATH_FLOW_PX_PER_MS = 0.02;
 const COMET_PULSE_PERIOD_MS = 900;
-const PILL_BACKGROUND_ALPHA = 0.92;
-const PILL_BORDER_ALPHA = 0.6;
+const PILL_BACKGROUND_ALPHA = 0.96;
 const HALO_REDUCED_INTENSITY = 0.6;
 
 export interface OverlaySigma {
@@ -194,6 +198,7 @@ export class AgentOverlay {
     const { width, height } = this.deps.sigma.getDimensions();
     context.clearRect(0, 0, width, height);
     context.save();
+    this.drawSelection(context, now, reducedMotion);
     this.drawPath(context, now, reducedMotion);
     this.drawChangedRings(context);
     if (!reducedMotion) {
@@ -202,6 +207,27 @@ export class AgentOverlay {
     }
     this.drawComet(context, now, reducedMotion);
     context.restore();
+  }
+
+  /** The selected file, ringed, with arcs to the files that import it (purple) and the files it imports (blue). */
+  private drawSelection(context: Pen, now: number, reducedMotion: boolean): void {
+    const { graph, store, palette } = this.deps;
+    const state = store.getState();
+    const origin = state.blast?.origin ?? state.selected;
+    if (origin === null || !graph.hasNode(origin)) return;
+    const centre = this.nodeViewport(origin);
+    const dashOffset = reducedMotion ? 0 : -now * ARC_FLOW_PX_PER_MS;
+    const { importers, imports } = arcTargets(graph, origin);
+    const arc = (from: Point, to: Point, color: string, index: number) => {
+      drawArc(context, { from, to, control: arcControl(from, to, index), color, dashOffset });
+    };
+    importers.forEach((id, index) => {
+      arc(this.nodeViewport(id), centre, palette.importer, index);
+    });
+    imports.forEach((id, index) => {
+      arc(centre, this.nodeViewport(id), palette.imports, index);
+    });
+    drawSelectionRing(context, centre, this.nodeRadius(origin) + 5, palette.labelStrong);
   }
 
   private drawPath(context: Pen, now: number, reducedMotion: boolean): void {
@@ -271,13 +297,15 @@ export class AgentOverlay {
       const pulse = reducedMotion ? 1 : 0.5 + 0.5 * Math.sin((now / COMET_PULSE_PERIOD_MS) * Math.PI * 2);
       drawCometHead(context, head, colors.agent, pulse);
     }
-    const content = { name: AGENT_NAME, text: label, fontFamily: palette.fontFamily };
+    const exploring = agentTone(status, current) === "explore";
+    const fill = exploring ? palette.explore : colors.agent;
+    const content = { name: exploring ? EXPLORE_NAME : AGENT_NAME, text: label, fontFamily: palette.monoFamily };
     const rect = placePill(head, measurePill(context, content), sigma.getDimensions());
     drawPill(context, rect, content, {
-      background: withAlpha(palette.panel, PILL_BACKGROUND_ALPHA),
-      border: withAlpha(colors.agent, PILL_BORDER_ALPHA),
-      name: colors.agent,
-      text: palette.labelStrong,
+      background: withAlpha(fill, PILL_BACKGROUND_ALPHA),
+      border: fill,
+      name: palette.background,
+      text: palette.background,
     });
   }
 }
