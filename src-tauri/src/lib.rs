@@ -1,7 +1,18 @@
+mod pty;
+
 pub fn run() {
     tauri::Builder::default()
-        .run(tauri::generate_context!())
-        .expect("failed to run Flare");
+        .manage(pty::PtyState::default())
+        .invoke_handler(tauri::generate_handler![
+            pty::commands::pty_spawn,
+            pty::commands::pty_write,
+            pty::commands::pty_resize,
+            pty::commands::pty_kill,
+        ])
+        .on_page_load(pty::on_page_load)
+        .build(tauri::generate_context!())
+        .expect("failed to build Flare")
+        .run(|app, event| pty::on_run_event(app, &event));
 }
 
 #[cfg(test)]
