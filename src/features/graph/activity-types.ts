@@ -14,12 +14,6 @@ export interface ActivityInput {
   source?: ActivitySource | undefined;
 }
 
-export type PulseKind = "read" | "change";
-
-export function activityKindOf(kind: PulseKind): ActivityKind {
-  return kind === "change" ? "edit" : "read";
-}
-
 export function isEditKind(kind: ActivityKind): boolean {
   return kind === "edit" || kind === "create";
 }

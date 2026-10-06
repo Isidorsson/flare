@@ -1,6 +1,6 @@
 import { useStore } from "zustand";
 
-import { activityKindOf, type ActivityInput, type AgentStatus, type PulseKind } from "./activity-types";
+import type { ActivityInput, AgentStatus } from "./activity-types";
 import { tauriGraphApi } from "./graph-api";
 import { createGraphStore, type GraphState } from "./graph-store";
 import { clock } from "./motion";
@@ -21,10 +21,6 @@ export function setAgentStatus(status: AgentStatus): void {
 
 export function startTurn(): void {
   graphStore.getState().startTurn();
-}
-
-export function pulse(path: string, kind: PulseKind): void {
-  recordAgentActivity({ path, kind: activityKindOf(kind) });
 }
 
 export function loadGraph(root: string): Promise<void> {

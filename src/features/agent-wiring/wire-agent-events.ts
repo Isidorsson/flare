@@ -7,12 +7,16 @@ import {
   noteAgentFileRead,
   startAgentTurn,
 } from "@/features/files";
-import { pulse } from "@/features/graph";
+import { recordAgentActivity, setAgentStatus, startTurn } from "@/features/graph";
 
 import { createAgentEventRouter } from "./agent-event-router";
+import { createGraphActivityRouter } from "./graph-activity-router";
 
 export function wireAgentEvents(): () => void {
-  return subscribeAgentEvents(
+  const unsubscribeGraph = subscribeAgentEvents(
+    createGraphActivityRouter({ recordActivity: recordAgentActivity, setStatus: setAgentStatus, startTurn }),
+  );
+  const unsubscribeFiles = subscribeAgentEvents(
     createAgentEventRouter({
       startTurn: startAgentTurn,
       endTurn: endAgentTurn,
@@ -20,7 +24,10 @@ export function wireAgentEvents(): () => void {
       noteFileRead: noteAgentFileRead,
       noteFileEditing: noteAgentFileEditing,
       endFileEditing: endAgentFileEditing,
-      pulse,
     }),
   );
+  return () => {
+    unsubscribeGraph();
+    unsubscribeFiles();
+  };
 }

@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 
-import { activityKindOf } from "./activity-types";
 import { blastRole } from "./appearance";
 import type { GraphApi } from "./graph-api";
 import { createGraphStore, type GraphStore } from "./graph-store";
@@ -258,9 +257,9 @@ describe("agent activity", () => {
     expect(h.store.getState().activity.nodes.size).toBe(0);
   });
 
-  test("the pulse wrapper still maps read and change onto activity kinds", () => {
-    h.store.getState().recordActivity({ path: "src/a.ts", kind: activityKindOf("read") });
-    h.store.getState().recordActivity({ path: "src/b.ts", kind: activityKindOf("change") });
+  test("records read and edit activity", () => {
+    h.store.getState().recordActivity({ path: "src/a.ts", kind: "read" });
+    h.store.getState().recordActivity({ path: "src/b.ts", kind: "edit" });
     expect(h.store.getState().activity.nodes.get("src/a.ts")?.lastKind).toBe("read");
     expect(h.store.getState().activity.nodes.get("src/b.ts")?.lastKind).toBe("edit");
   });

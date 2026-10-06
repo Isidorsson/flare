@@ -34,11 +34,6 @@ export const DIRECTORY_TOKENS = [
   "--color-fg-muted",
 ] as const;
 
-export const PULSE_TOKENS = {
-  read: "--color-fg",
-  change: "--color-accent-hover",
-} as const;
-
 export const BLAST_TOKENS = {
   origin: "--color-accent",
   depths: ["--color-danger", "--color-warning", "--color-info"],
@@ -59,7 +54,6 @@ const FONT_TOKEN = "--font-sans";
 export interface Palette {
   language: Readonly<Record<Language, string>>;
   directories: readonly string[];
-  pulse: Readonly<Record<keyof typeof PULSE_TOKENS, string>>;
   blastOrigin: string;
   blastDepths: readonly string[];
   dim: string;
@@ -104,7 +98,6 @@ export function readPalette(read: ReadToken): Palette {
   return {
     language: languageColors(pick),
     directories: DIRECTORY_TOKENS.map(pick),
-    pulse: { read: pick(PULSE_TOKENS.read), change: pick(PULSE_TOKENS.change) },
     blastOrigin: pick(BLAST_TOKENS.origin),
     blastDepths: BLAST_TOKENS.depths.map(pick),
     dim: pick(SURFACE_TOKENS.dim),
@@ -121,7 +114,6 @@ export function readPalette(read: ReadToken): Palette {
 export const ALL_PALETTE_TOKENS: readonly string[] = [
   ...Object.values(LANGUAGE_TOKENS),
   ...DIRECTORY_TOKENS,
-  ...Object.values(PULSE_TOKENS),
   BLAST_TOKENS.origin,
   ...BLAST_TOKENS.depths,
   ...Object.values(SURFACE_TOKENS),

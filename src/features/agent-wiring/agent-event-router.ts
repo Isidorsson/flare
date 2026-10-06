@@ -1,7 +1,6 @@
 import type { BridgeEvent, BridgeEventOf } from "@flare/protocol";
 
 import type { AgentFileChange, AgentFileEditing, AgentFileRead } from "@/features/files";
-import type { PulseKind } from "@/features/graph";
 
 export interface AgentEventSinks {
   startTurn: (turnId: string) => void;
@@ -10,7 +9,6 @@ export interface AgentEventSinks {
   noteFileRead: (read: AgentFileRead) => void;
   noteFileEditing: (editing: AgentFileEditing) => void;
   endFileEditing: (toolUseId: string) => void;
-  pulse: (path: string, kind: PulseKind) => void;
 }
 
 function toRead(event: BridgeEventOf<"file.read">): AgentFileRead {
@@ -66,11 +64,9 @@ export function createAgentEventRouter(sinks: AgentEventSinks): (event: BridgeEv
         return;
       case "file.change":
         sinks.applyFileChange(toChange(event, `turn-${String(turn)}`));
-        sinks.pulse(event.path, "change");
         return;
       case "file.read":
         sinks.noteFileRead(toRead(event));
-        sinks.pulse(event.path, "read");
         return;
       default:
         return;

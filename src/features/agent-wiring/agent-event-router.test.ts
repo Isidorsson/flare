@@ -16,7 +16,6 @@ function setup() {
   const reads: AgentFileRead[] = [];
   const editing: AgentFileEditing[] = [];
   const calls: string[] = [];
-  const pulses: string[] = [];
   const route = createAgentEventRouter({
     startTurn: (turnId) => {
       calls.push(`startTurn:${turnId}`);
@@ -36,11 +35,8 @@ function setup() {
     endFileEditing: (toolUseId) => {
       calls.push(`endEditing:${toolUseId}`);
     },
-    pulse: (path, kind) => {
-      pulses.push(`${kind}:${path}`);
-    },
   });
-  return { route, changes, reads, editing, calls, pulses };
+  return { route, changes, reads, editing, calls };
 }
 
 describe("file changes", () => {
@@ -60,11 +56,6 @@ describe("file changes", () => {
     ]);
   });
 
-  test("pulses the graph for a change", () => {
-    const { route, pulses } = setup();
-    route(fileChange("b.ts"));
-    expect(pulses).toEqual(["change:b.ts"]);
-  });
 });
 
 describe("turns", () => {
@@ -115,11 +106,6 @@ describe("file reads", () => {
     expect(reads).toEqual([{ path: "a.ts", range: null, pattern: "useEffect", matchLines: [3, 9] }]);
   });
 
-  test("pulses the graph for a read", () => {
-    const { route, pulses } = setup();
-    route({ type: "file.read", toolUseId: "t", path: "a.ts" });
-    expect(pulses).toEqual(["read:a.ts"]);
-  });
 });
 
 describe("file editing", () => {
@@ -135,11 +121,6 @@ describe("file editing", () => {
     expect(editing).toEqual([{ toolUseId: "t1", path: "n.ts", kind: "write", oldString: null, text: "x" }]);
   });
 
-  test("does not touch the graph while typing", () => {
-    const { route, pulses } = setup();
-    route({ type: "file.editing", toolUseId: "t1", path: "a.ts", kind: "write", text: "x" });
-    expect(pulses).toEqual([]);
-  });
 
   test("tells the files panel when a tool finishes so an edit that never landed is dropped", () => {
     const { route, calls } = setup();
@@ -149,8 +130,8 @@ describe("file editing", () => {
 });
 
 test("ignores unrelated events", () => {
-  const { route, changes, reads, editing, calls, pulses } = setup();
+  const { route, changes, reads, editing, calls } = setup();
   route({ type: "assistant.delta", text: "hi" });
   route({ type: "session.ready", sessionId: "s" });
-  expect([changes, reads, editing, calls, pulses]).toEqual([[], [], [], [], []]);
+  expect([changes, reads, editing, calls]).toEqual([[], [], [], []]);
 });
