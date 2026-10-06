@@ -4,6 +4,7 @@ import type { SizeBounds } from "@/shared/lib/splitter-math";
 import {
   CENTER_MIN_WIDTH,
   CHAT_MIN_HEIGHT,
+  FILES_MIN_WIDTH,
   PANE_LIMITS,
   TERMINAL_HEADER_HEIGHT,
   type PaneLimits,
@@ -17,16 +18,19 @@ export interface Viewport {
 export interface StoredSizes {
   sidebarWidth: number;
   rightWidth: number;
+  graphWidth: number;
   terminalHeight: number;
 }
 
 export interface ResolvedLayout {
   sidebar: number;
   right: number;
+  graph: number;
   terminal: number;
   bounds: {
     sidebar: SizeBounds;
     right: SizeBounds;
+    graph: SizeBounds;
     terminal: SizeBounds;
   };
 }
@@ -55,13 +59,17 @@ export function resolveLayout(stored: StoredSizes, viewport: Viewport): Resolved
     viewport.height - CHAT_MIN_HEIGHT - TERMINAL_HEADER_HEIGHT,
   );
 
+  const graphBounds = boundsWithin(PANE_LIMITS.graph, right - FILES_MIN_WIDTH);
+
   return {
     sidebar,
     right,
+    graph: clamp(stored.graphWidth, graphBounds.min, graphBounds.max),
     terminal: clamp(stored.terminalHeight, terminalBounds.min, terminalBounds.max),
     bounds: {
       sidebar: boundsWithin(PANE_LIMITS.sidebar, sideBudget - right),
       right: boundsWithin(PANE_LIMITS.right, sideBudget - sidebar),
+      graph: graphBounds,
       terminal: terminalBounds,
     },
   };

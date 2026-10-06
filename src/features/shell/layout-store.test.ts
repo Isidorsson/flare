@@ -56,14 +56,14 @@ describe("layout store defaults and actions", () => {
     expect(store.getState().terminalHeight).toBe(PANE_LIMITS.terminal.min);
   });
 
-  test("toggles the terminal drawer and switches the right tab", () => {
+  test("toggles the terminal drawer and clamps the graph width", () => {
     const store = createLayoutStore(memoryStorage().storage);
 
     store.getState().toggleTerminal();
     expect(store.getState().terminalOpen).toBe(!DEFAULT_LAYOUT.terminalOpen);
 
-    store.getState().setRightTab("graph");
-    expect(store.getState().rightTab).toBe("graph");
+    store.getState().setGraphWidth(10);
+    expect(store.getState().graphWidth).toBe(PANE_LIMITS.graph.min);
   });
 });
 
@@ -73,12 +73,12 @@ describe("layout store persistence", () => {
     const store = createLayoutStore(storage);
 
     store.getState().setSidebarWidth(310);
-    store.getState().setRightTab("graph");
+    store.getState().setGraphWidth(500);
 
     const raw = data.get(LAYOUT_STORAGE_KEY);
     expect(raw).toBeDefined();
     expect(JSON.parse(raw ?? "")).toEqual({
-      state: { ...DEFAULT_LAYOUT, sidebarWidth: 310, rightTab: "graph" },
+      state: { ...DEFAULT_LAYOUT, sidebarWidth: 310, graphWidth: 500 },
       version: LAYOUT_STORAGE_VERSION,
     });
   });
@@ -89,7 +89,7 @@ describe("layout store persistence", () => {
         ...DEFAULT_LAYOUT,
         sidebarWidth: 333,
         terminalOpen: false,
-        rightTab: "graph",
+        graphWidth: 500,
       }),
     });
     const store = createLayoutStore(storage);
@@ -97,7 +97,7 @@ describe("layout store persistence", () => {
     expect(store.getState()).toMatchObject({
       sidebarWidth: 333,
       terminalOpen: false,
-      rightTab: "graph",
+      graphWidth: 500,
     });
   });
 
@@ -113,7 +113,7 @@ describe("layout store persistence", () => {
 
   test("discards a persisted payload that fails schema validation and warns", () => {
     const { storage } = memoryStorage({
-      [LAYOUT_STORAGE_KEY]: persistedEntry({ ...DEFAULT_LAYOUT, rightTab: "terminal" }),
+      [LAYOUT_STORAGE_KEY]: persistedEntry({ ...DEFAULT_LAYOUT, terminalOpen: "yes" }),
     });
     const store = createLayoutStore(storage);
 

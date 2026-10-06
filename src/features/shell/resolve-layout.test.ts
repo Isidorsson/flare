@@ -3,28 +3,29 @@ import { describe, expect, test } from "bun:test";
 import {
   CENTER_MIN_WIDTH,
   CHAT_MIN_HEIGHT,
+  FILES_MIN_WIDTH,
   PANE_LIMITS,
   TERMINAL_HEADER_HEIGHT,
 } from "./layout-constants";
 import { resolveLayout } from "./resolve-layout";
 
-const STORED = { sidebarWidth: 280, rightWidth: 420, terminalHeight: 260 };
+const STORED = { sidebarWidth: 280, rightWidth: 620, graphWidth: 300, terminalHeight: 260 };
 
 describe("resolveLayout", () => {
   test("keeps stored sizes when the viewport is roomy", () => {
     const layout = resolveLayout(STORED, { width: 1920, height: 1080 });
 
     expect(layout.sidebar).toBe(280);
-    expect(layout.right).toBe(420);
+    expect(layout.right).toBe(620);
     expect(layout.terminal).toBe(260);
   });
 
   test("shrinks the right pane first when the centre would get too narrow", () => {
-    const width = CENTER_MIN_WIDTH + 280 + 350;
+    const width = CENTER_MIN_WIDTH + 280 + 560;
     const layout = resolveLayout(STORED, { width, height: 900 });
 
     expect(layout.sidebar).toBe(280);
-    expect(layout.right).toBe(350);
+    expect(layout.right).toBe(560);
   });
 
   test("then shrinks the sidebar once the right pane reaches its minimum", () => {
@@ -43,11 +44,18 @@ describe("resolveLayout", () => {
   });
 
   test("limits the sidebar bound by the width the right pane leaves free", () => {
-    const width = CENTER_MIN_WIDTH + 600;
+    const width = CENTER_MIN_WIDTH + 900;
     const layout = resolveLayout(STORED, { width, height: 900 });
 
     expect(layout.bounds.sidebar.max).toBe(width - CENTER_MIN_WIDTH - layout.right);
     expect(layout.bounds.right.max).toBe(width - CENTER_MIN_WIDTH - layout.sidebar);
+  });
+
+  test("leaves the files column its minimum width beside the graph", () => {
+    const layout = resolveLayout({ ...STORED, graphWidth: 5000 }, { width: 1920, height: 1080 });
+
+    expect(layout.bounds.graph.max).toBe(layout.right - FILES_MIN_WIDTH);
+    expect(layout.graph).toBe(layout.right - FILES_MIN_WIDTH);
   });
 
   test("keeps the chat tall enough by capping the terminal height", () => {

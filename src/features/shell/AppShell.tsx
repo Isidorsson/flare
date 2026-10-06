@@ -11,17 +11,19 @@ import { useLayout } from "./use-layout";
 export function AppShell() {
   const sidebarWidth = useLayout((state) => state.sidebarWidth);
   const rightWidth = useLayout((state) => state.rightWidth);
+  const graphWidth = useLayout((state) => state.graphWidth);
   const terminalHeight = useLayout((state) => state.terminalHeight);
   const terminalOpen = useLayout((state) => state.terminalOpen);
   const setSidebarWidth = useLayout((state) => state.setSidebarWidth);
   const setRightWidth = useLayout((state) => state.setRightWidth);
+  const setGraphWidth = useLayout((state) => state.setGraphWidth);
   const setTerminalHeight = useLayout((state) => state.setTerminalHeight);
   const toggleTerminal = useLayout((state) => state.toggleTerminal);
   const viewportWidth = useViewportWidth();
   const viewportHeight = useViewportHeight();
 
   const layout = resolveLayout(
-    { sidebarWidth, rightWidth, terminalHeight },
+    { sidebarWidth, rightWidth, graphWidth, terminalHeight },
     { width: viewportWidth, height: viewportHeight },
   );
 
@@ -58,7 +60,7 @@ export function AppShell() {
         style={{ width: layout.right }}
         className="relative shrink-0 border-l border-border bg-surface-1"
       >
-        <RightPanel />
+        <RightPanel graphWidth={layout.graph} graphBounds={layout.bounds.graph} onResizeGraph={setGraphWidth} />
         <Splitter
           edge="left"
           label="Resize inspector"

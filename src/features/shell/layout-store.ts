@@ -8,9 +8,7 @@ import {
   LAYOUT_STORAGE_KEY,
   LAYOUT_STORAGE_VERSION,
   PANE_LIMITS,
-  RIGHT_TABS,
   type PaneLimits,
-  type RightTab,
 } from "./layout-constants";
 
 const clampToLimits = (value: number, limits: PaneLimits): number =>
@@ -23,7 +21,7 @@ const persistedLayoutSchema = z.object({
   rightWidth: paneSize(PANE_LIMITS.right),
   terminalHeight: paneSize(PANE_LIMITS.terminal),
   terminalOpen: z.boolean(),
-  rightTab: z.enum(RIGHT_TABS),
+  graphWidth: paneSize(PANE_LIMITS.graph),
 });
 
 type PersistedLayout = z.infer<typeof persistedLayoutSchema>;
@@ -33,7 +31,7 @@ export interface LayoutState extends PersistedLayout {
   setRightWidth: (px: number) => void;
   setTerminalHeight: (px: number) => void;
   toggleTerminal: () => void;
-  setRightTab: (tab: RightTab) => void;
+  setGraphWidth: (px: number) => void;
 }
 
 export const DEFAULT_LAYOUT: PersistedLayout = {
@@ -41,7 +39,7 @@ export const DEFAULT_LAYOUT: PersistedLayout = {
   rightWidth: PANE_LIMITS.right.initial,
   terminalHeight: PANE_LIMITS.terminal.initial,
   terminalOpen: true,
-  rightTab: "files",
+  graphWidth: PANE_LIMITS.graph.initial,
 };
 
 function mergePersistedLayout(persisted: unknown, current: LayoutState): LayoutState {
@@ -60,7 +58,7 @@ function pickPersisted(state: LayoutState): PersistedLayout {
     rightWidth: state.rightWidth,
     terminalHeight: state.terminalHeight,
     terminalOpen: state.terminalOpen,
-    rightTab: state.rightTab,
+    graphWidth: state.graphWidth,
   };
 }
 
@@ -81,8 +79,8 @@ export function createLayoutStore(storage: StateStorage) {
         toggleTerminal: () => {
           set((state) => ({ terminalOpen: !state.terminalOpen }));
         },
-        setRightTab: (tab) => {
-          set({ rightTab: tab });
+        setGraphWidth: (px) => {
+          set({ graphWidth: clampToLimits(px, PANE_LIMITS.graph) });
         },
       }),
       {
