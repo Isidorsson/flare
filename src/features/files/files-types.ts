@@ -61,17 +61,28 @@ export interface TreeSlice {
 export interface OpenFileOptions {
   preview?: boolean;
   quiet?: boolean;
+  /** 1-based line to bring into view once the file's editor shows it. */
+  line?: number;
+}
+
+/** A line the editor of `path` should scroll to and put the cursor on; consumed (cleared) once shown. */
+export interface RevealRequest {
+  id: number;
+  path: string;
+  line: number;
 }
 
 export interface BufferSlice {
   files: Record<string, OpenFile>;
   tabs: string[];
   active: ActiveView;
+  reveal: RevealRequest | null;
   openFile: (path: string, options?: OpenFileOptions) => Promise<void>;
   // A preview tab for a file the agent is about to create, so there is somewhere to type into.
   openEmptyPreview: (path: string) => void;
   activateFile: (path: string) => void;
   closeFile: (path: string) => void;
+  clearReveal: (id: number) => void;
   setDraft: (path: string, content: string) => void;
   saveFile: (path: string) => Promise<void>;
   saveActive: () => Promise<void>;
@@ -80,7 +91,7 @@ export interface BufferSlice {
   applyDiskContent: (path: string, content: string | null) => void;
 }
 
-export type BufferData = Pick<BufferSlice, "files" | "tabs" | "active">;
+export type BufferData = Pick<BufferSlice, "files" | "tabs" | "active" | "reveal">;
 export type BufferActions = Omit<BufferSlice, keyof BufferData>;
 
 export interface AgentSlice {

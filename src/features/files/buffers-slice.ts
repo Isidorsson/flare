@@ -7,16 +7,20 @@ import { resolvePath } from "./paths";
 import { updateFile } from "./store-utils";
 
 export function initialBufferState(): BufferData {
-  return { files: {}, tabs: [], active: null };
+  return { files: {}, tabs: [], active: null, reveal: null };
 }
 
 export function bufferActions(ctx: StoreContext): BufferActions {
   const { set, get } = ctx;
+  let revealSeq = 0;
 
   async function openFile(rawPath: string, options: OpenFileOptions = {}) {
     const path = resolvePath(get().root, rawPath);
     if (path === null) throw new Error(`Cannot open "${rawPath}" without an open workspace`);
-    if (options.quiet !== true) recordUserActivity(ctx, "pickedAt");
+    if (options.quiet !== true) {
+      recordUserActivity(ctx, "pickedAt");
+      set({ reveal: options.line === undefined ? null : { id: ++revealSeq, path, line: options.line } });
+    }
     const preview = options.preview ?? false;
     const existing = get().files[path];
     if (existing !== undefined) {
@@ -48,6 +52,9 @@ export function bufferActions(ctx: StoreContext): BufferActions {
     },
     closeFile: (path) => {
       set(withoutTab(path));
+    },
+    clearReveal: (id) => {
+      set((state) => (state.reveal?.id === id ? { reveal: null } : {}));
     },
     setDraft: (path, content) => {
       recordUserActivity(ctx, "typedAt");

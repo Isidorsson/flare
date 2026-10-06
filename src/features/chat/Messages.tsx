@@ -1,4 +1,7 @@
 import { CircleAlert } from "lucide-react";
+import { memo } from "react";
+
+import { Markdown } from "./markdown/Markdown";
 
 export function UserMessage({ text }: { text: string }) {
   return (
@@ -10,14 +13,13 @@ export function UserMessage({ text }: { text: string }) {
   );
 }
 
-export function AssistantMessage({ text, streaming }: { text: string; streaming: boolean }) {
+export const AssistantMessage = memo(function AssistantMessage({ text, streaming }: { text: string; streaming: boolean }) {
   return (
-    <div className="text-sm leading-relaxed break-words whitespace-pre-wrap text-fg select-text">
-      {text}
-      {streaming && <span aria-hidden className="ml-0.5 inline-block h-4 w-1.5 translate-y-0.5 animate-pulse bg-accent" />}
+    <div className="text-sm leading-relaxed text-fg select-text">
+      <Markdown text={text} streaming={streaming} />
     </div>
   );
-}
+});
 
 export function NoticeRow({ text }: { text: string }) {
   return (

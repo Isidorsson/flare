@@ -6,6 +6,7 @@ export interface LanguageDefinition {
   id: string;
   extensions?: readonly string[] | undefined;
   filenames?: readonly string[] | undefined;
+  aliases?: readonly string[] | undefined;
 }
 
 export type DiffSide = "original" | "modified";
@@ -45,4 +46,21 @@ export function pickLanguage(path: string, languages: readonly LanguageDefinitio
     if (match) return match.id;
   }
   return PLAINTEXT_LANGUAGE;
+}
+
+/** Maps a code fence's info string (`ts`, `bash`, `tsx`) to a Monaco language id: by id, then alias, then extension. */
+export function matchLanguageHint(hint: string, languages: readonly LanguageDefinition[]): string | null {
+  const wanted = hint.trim().toLowerCase();
+  if (wanted === "") return null;
+  const extension = `.${wanted}`;
+  const tiers = [
+    (language: LanguageDefinition) => language.id.toLowerCase() === wanted,
+    (language: LanguageDefinition) => language.aliases?.some((alias) => alias.toLowerCase() === wanted) === true,
+    (language: LanguageDefinition) => language.extensions?.some((candidate) => candidate.toLowerCase() === extension) === true,
+  ];
+  for (const isMatch of tiers) {
+    const found = languages.find(isMatch);
+    if (found) return found.id;
+  }
+  return null;
 }

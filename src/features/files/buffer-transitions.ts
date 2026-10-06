@@ -22,7 +22,8 @@ export function withoutTab(path: string): Transition {
     const closingActive = state.active?.kind === "file" && state.active.path === path;
     const neighbour = tabs[index] ?? tabs[index - 1];
     const fallback = neighbour === undefined ? null : { kind: "file" as const, path: neighbour };
-    return { files: omitKey(state.files, path), tabs, active: closingActive ? fallback : state.active };
+    const reveal = state.reveal?.path === path ? null : state.reveal;
+    return { files: omitKey(state.files, path), tabs, active: closingActive ? fallback : state.active, reveal };
   };
 }
 

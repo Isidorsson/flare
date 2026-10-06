@@ -1,8 +1,10 @@
+import type { ColorizedLine } from "./colorized-html";
 import type { AgentFileChange, OpenFileOptions } from "./files-types";
 import type { AgentFileEditing, AgentFileRead } from "./live/agent-activity";
 import { agentActivity } from "./live/use-live";
 import { filesStore } from "./use-files";
 
+export type { ColorizedLine, ColorizedSpan } from "./colorized-html";
 export type { AgentChangeKind, AgentFileChange, OpenFileOptions } from "./files-types";
 export type { AgentFileEditing, AgentFileRead } from "./live/agent-activity";
 
@@ -36,7 +38,13 @@ export function endAgentTurn(): void {
   agentActivity.endTurn();
 }
 
-/** Accepts an absolute or workspace-relative path. Read failures show up in the file's tab. */
+/** Accepts an absolute or workspace-relative path; `options.line` scrolls the editor there. Read failures show up in the file's tab. */
 export function openFile(path: string, options?: OpenFileOptions): Promise<void> {
   return filesStore.getState().openFile(path, options);
+}
+
+/** Colours a snippet with the editor's tokenizer and theme. Monaco loads on first use; null means no such language. */
+export async function colorizeCode(code: string, languageHint: string): Promise<ColorizedLine[] | null> {
+  const { colorizeCode: colorize } = await import("./colorize");
+  return colorize(code, languageHint);
 }
