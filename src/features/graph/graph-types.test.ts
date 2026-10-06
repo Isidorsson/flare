@@ -29,7 +29,7 @@ describe("graph snapshot schema", () => {
   });
 
   test("rejects unknown languages", () => {
-    const bad = { ...rustJson, nodes: [{ id: "a.go", language: "go" }] };
+    const bad = { ...rustJson, nodes: [{ id: "a.cob", language: "cobol" }] };
     expect(graphSnapshotSchema.safeParse(bad).success).toBe(false);
   });
 
@@ -39,7 +39,35 @@ describe("graph snapshot schema", () => {
   });
 
   test("lists every language the Rust side can emit", () => {
-    expect([...LANGUAGES].sort()).toEqual(["javascript", "python", "rust", "typescript"]);
+    expect([...LANGUAGES].sort()).toEqual([
+      "c",
+      "cpp",
+      "csharp",
+      "css",
+      "dart",
+      "go",
+      "java",
+      "javascript",
+      "kotlin",
+      "lua",
+      "luau",
+      "php",
+      "python",
+      "ruby",
+      "rust",
+      "shell",
+      "svelte",
+      "swift",
+      "typescript",
+      "vue",
+      "zig",
+    ]);
+  });
+
+  test("accepts a node of every language", () => {
+    const nodes = LANGUAGES.map((language) => ({ id: `src/file.${language}`, language }));
+    const snapshot = { root: "C:/app", nodes, edges: [], warnings: [] };
+    expect(graphSnapshotSchema.parse(snapshot).nodes.map((node) => node.language)).toEqual([...LANGUAGES]);
   });
 });
 

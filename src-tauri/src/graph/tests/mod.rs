@@ -1,9 +1,22 @@
 mod blast_radius;
+mod c_family;
+mod components;
+mod csharp;
+mod dart;
 mod ecmascript;
+mod go;
 mod incremental;
+mod jvm;
+mod lua;
+mod node_only;
+mod php;
 mod python;
+mod ruby;
 mod rust_lang;
+mod shell;
+mod stylesheet;
 mod workspace;
+mod zig;
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -11,6 +24,7 @@ use std::path::{Path, PathBuf};
 use tempfile::TempDir;
 
 use super::indexer::Indexer;
+use super::model::Language;
 
 pub struct Fixture {
     dir: TempDir,
@@ -86,4 +100,13 @@ pub fn node_ids(indexer: &Indexer) -> Vec<String> {
 
 pub fn pair(source: &str, target: &str) -> (String, String) {
     (source.to_string(), target.to_string())
+}
+
+pub fn language_of(indexer: &Indexer, id: &str) -> Option<Language> {
+    indexer
+        .snapshot()
+        .nodes
+        .into_iter()
+        .find(|node| node.id == id)
+        .map(|node| node.language)
 }

@@ -38,4 +38,22 @@
 
   --default-transition-duration: 120ms;
   --default-transition-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
+
+  --color-lang-lua: #c0c5ff;
+  --color-lang-luau: #9982f8;
+  --color-lang-go: #20acb3;
+  --color-lang-c: #7abbda;
+  --color-lang-cpp: #8e93c9;
+  --color-lang-csharp: #f9aafd;
+  --color-lang-java: #f9b9a3;
+  --color-lang-kotlin: #cb6fd1;
+  --color-lang-ruby: #f471aa;
+  --color-lang-php: #bf9bfc;
+  --color-lang-swift: #fb906a;
+  --color-lang-dart: #27e3fd;
+  --color-lang-zig: #cd9c1f;
+  --color-lang-shell: #bdda49;
+  --color-lang-css: #d99cb8;
+  --color-lang-vue: #2eb45c;
+  --color-lang-svelte: #c2896f;
 }

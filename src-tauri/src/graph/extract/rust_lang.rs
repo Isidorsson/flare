@@ -109,6 +109,7 @@ mod tests {
         Extractor::new()
             .extract(SourceKind::Rust, "lib.rs", source.as_bytes())
             .unwrap()
+            .imports
     }
 
     fn uses(source: &str) -> Vec<Vec<String>> {

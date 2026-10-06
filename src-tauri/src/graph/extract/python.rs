@@ -76,6 +76,7 @@ mod tests {
         Extractor::new()
             .extract(SourceKind::Python, "m.py", source.as_bytes())
             .unwrap()
+            .imports
     }
 
     fn import(level: usize, module: &[&str], names: &[&str]) -> RawImport {

@@ -72,6 +72,7 @@ mod tests {
         Extractor::new()
             .extract(kind, "test", source.as_bytes())
             .unwrap()
+            .imports
             .into_iter()
             .map(|import| match import {
                 RawImport::Module { specifier } => specifier,
