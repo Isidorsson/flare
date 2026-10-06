@@ -6,7 +6,7 @@ import tseslint from "typescript-eslint";
 
 export default tseslint.config(
   {
-    ignores: ["**/dist/**", "**/node_modules/**", "src-tauri/**", "bridge/out/**", "bridge/bin/**"],
+    ignores: [".claude/**", "**/dist/**", "**/node_modules/**", "src-tauri/**", "bridge/out/**", "bridge/bin/**"],
   },
   js.configs.recommended,
   tseslint.configs.strictTypeChecked,
