@@ -67,15 +67,20 @@ export const createGhosttySession: SessionFactory = async (options, events): Pro
     throw error;
   }
 
+  const detach = () => {
+    state.closed = true;
+    host.element.remove();
+    term.dispose();
+  };
+
   return {
     mount: (container) => mountHost(host, container),
     focus: () => {
       term.focus();
     },
+    detach,
     dispose: async () => {
-      state.closed = true;
-      host.element.remove();
-      term.dispose();
+      detach();
       await killPty(options.id);
     },
   };

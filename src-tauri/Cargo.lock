@@ -856,6 +856,7 @@ version = "0.1.0"
 dependencies = [
  "dunce",
  "ignore",
+ "libc",
  "notify",
  "portable-pty",
  "rayon",
@@ -885,6 +886,7 @@ dependencies = [
  "tree-sitter-rust",
  "tree-sitter-typescript",
  "tree-sitter-zig",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

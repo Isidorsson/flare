@@ -1,6 +1,7 @@
 mod coalesce;
 pub mod commands;
 mod error;
+mod host;
 mod pump;
 mod registry;
 mod session;
@@ -9,6 +10,10 @@ mod state;
 
 #[cfg(test)]
 mod roundtrip_tests;
+#[cfg(test)]
+mod test_support;
+#[cfg(all(test, windows))]
+mod tree_tests;
 
 use tauri::webview::{PageLoadEvent, PageLoadPayload};
 use tauri::{AppHandle, Manager, RunEvent, Webview};
@@ -24,7 +29,10 @@ pub fn on_run_event(app: &AppHandle, event: &RunEvent) {
 /// A new page load discards every terminal the previous page owned, so shells
 /// are not orphaned by a reload.
 pub fn on_page_load(webview: &Webview, payload: &PageLoadPayload<'_>) {
-    if payload.event() == PageLoadEvent::Started {
-        webview.state::<PtyState>().kill_all();
+    if payload.event() != PageLoadEvent::Started {
+        return;
+    }
+    if let Err(error) = webview.state::<PtyState>().kill_all().into_count() {
+        eprintln!("flare pty: {error}");
     }
 }

@@ -20,6 +20,12 @@ export function parsePtyMessage(raw: unknown): PtyMessage {
   return ptyMessageSchema.parse(raw);
 }
 
+const closedCountSchema = z.number().int().nonnegative();
+
+export function parseClosedCount(raw: unknown): number {
+  return closedCountSchema.parse(raw);
+}
+
 export function describeExit(code: number | null): string {
   return code === null ? "process exited" : `process exited with code ${code}`;
 }

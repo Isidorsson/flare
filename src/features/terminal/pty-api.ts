@@ -1,7 +1,7 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
 
 import { PtyCommandError } from "./errors";
-import { parsePtyMessage, type PtyMessage } from "./pty-protocol";
+import { parseClosedCount, parsePtyMessage, type PtyMessage } from "./pty-protocol";
 import { PTY_COMMANDS } from "./terminal-constants";
 
 export interface SpawnOptions {
@@ -11,12 +11,16 @@ export interface SpawnOptions {
   rows: number;
 }
 
-async function callPty(command: string, args: Record<string, unknown>): Promise<void> {
+async function invokePty(command: string, args?: Record<string, unknown>): Promise<unknown> {
   try {
-    await invoke(command, args);
+    return await invoke(command, args);
   } catch (error) {
     throw new PtyCommandError(command, error);
   }
+}
+
+async function callPty(command: string, args: Record<string, unknown>): Promise<void> {
+  await invokePty(command, args);
 }
 
 export async function spawnPty(
@@ -39,4 +43,9 @@ export function resizePty(id: string, cols: number, rows: number): Promise<void>
 
 export function killPty(id: string): Promise<void> {
   return callPty(PTY_COMMANDS.kill, { id });
+}
+
+/** Resolves to how many terminals the backend closed. */
+export async function killAllPty(): Promise<number> {
+  return parseClosedCount(await invokePty(PTY_COMMANDS.killAll));
 }

@@ -12,6 +12,8 @@ use tauri_plugin_shell::ShellExt;
 
 use framing::{frame_outgoing, FramingError, LineFramer, OutgoingError};
 
+use crate::proctree::{ProcessTree, TreeError};
+
 #[cfg(not(debug_assertions))]
 const SIDECAR_NAME: &str = "flare-bridge";
 #[cfg(debug_assertions)]
@@ -22,6 +24,7 @@ const DEV_BRIDGE_ENTRY: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../bridge/s
 #[derive(Debug)]
 pub enum BridgeError {
     Spawn(String),
+    Contain(TreeError),
     NotRunning,
     Write(String),
     InvalidLine(OutgoingError),
@@ -32,6 +35,7 @@ impl fmt::Display for BridgeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Spawn(reason) => write!(f, "could not start the agent bridge: {reason}"),
+            Self::Contain(reason) => write!(f, "could not contain the agent bridge: {reason}"),
             Self::NotRunning => write!(f, "the agent bridge is not running"),
             Self::Write(reason) => write!(f, "could not write to the agent bridge: {reason}"),
             Self::InvalidLine(reason) => write!(f, "{reason}"),
@@ -52,6 +56,7 @@ impl Serialize for BridgeError {
 struct Running {
     pid: u32,
     child: CommandChild,
+    tree: ProcessTree,
 }
 
 #[derive(Default)]
@@ -94,8 +99,12 @@ impl BridgeState {
     }
 }
 
+/// The bridge starts `claude`, which starts whatever the agent runs, so the whole tree goes.
 fn kill_quietly(running: Option<Running>) {
-    if let Some(Running { pid, child }) = running {
+    if let Some(Running { pid, child, tree }) = running {
+        if let Err(error) = tree.terminate() {
+            eprintln!("flare: could not stop the processes of agent bridge {pid}: {error}");
+        }
         if let Err(error) = child.kill() {
             eprintln!("flare: could not stop agent bridge {pid}: {error}");
         }
@@ -112,7 +121,16 @@ pub fn bridge_start(
         .and_then(|command| command.set_raw_out(true).spawn())
         .map_err(|error| BridgeError::Spawn(error.to_string()))?;
     let pid = child.pid();
-    state.replace(Running { pid, child })?;
+    let tree = match ProcessTree::adopt(pid) {
+        Ok(tree) => tree,
+        Err(error) => {
+            if let Err(kill_error) = child.kill() {
+                eprintln!("flare: could not stop agent bridge {pid}: {kill_error}");
+            }
+            return Err(BridgeError::Contain(error));
+        }
+    };
+    state.replace(Running { pid, child, tree })?;
     tauri::async_runtime::spawn(relay(app, events, on_event, pid));
     Ok(())
 }

@@ -11,13 +11,18 @@ import { createTerminalStore } from "./terminal-store";
 
 interface FakeSession extends TerminalSession {
   disposed: number;
+  detached: number;
 }
 
 function fakeSession(): FakeSession {
   const session: FakeSession = {
     disposed: 0,
+    detached: 0,
     mount: () => () => undefined,
     focus: () => undefined,
+    detach: () => {
+      session.detached += 1;
+    },
     dispose: () => {
       session.disposed += 1;
       return Promise.resolve();
@@ -40,10 +45,16 @@ function setup(cwd: string | null = "C:/code/app") {
     new Promise<TerminalSession>((resolve, reject) => {
       launches.push({ options, events, resolve, reject });
     });
+  const killAllCalls: { resolve: (closed: number) => void; reject: (error: Error) => void }[] = [];
+  const killAll = () =>
+    new Promise<number>((resolve, reject) => {
+      killAllCalls.push({ resolve, reject });
+    });
   let counter = 0;
   const controller = createTerminalController({
     store,
     createSession,
+    killAll,
     getCwd: () => cwd,
     newId: () => `t${++counter}`,
   });
@@ -51,7 +62,7 @@ function setup(cwd: string | null = "C:/code/app") {
     await Promise.resolve();
     await Promise.resolve();
   };
-  return { store, controller, launches, settle };
+  return { store, controller, launches, killAllCalls, settle };
 }
 
 let consoleError: ReturnType<typeof spyOn<Console, "error">>;
@@ -190,5 +201,73 @@ describe("terminal controller", () => {
     expect(sessionA.disposed).toBe(1);
     expect(sessionB.disposed).toBe(0);
     expect(controller.getSession(second)).toBe(sessionB);
+  });
+
+  describe("closing every terminal", () => {
+    test("clears the tabs, detaches each live session and kills the backend once", async () => {
+      const { store, controller, launches, killAllCalls, settle } = setup();
+      const first = controller.openTab();
+      const second = controller.openTab();
+      const sessionA = fakeSession();
+      const sessionB = fakeSession();
+      launches[0]?.resolve(sessionA);
+      launches[1]?.resolve(sessionB);
+      await settle();
+
+      controller.closeAll();
+
+      expect(store.getState().tabs).toEqual([]);
+      expect(store.getState().activeId).toBeNull();
+      expect(controller.getSession(first)).toBeUndefined();
+      expect(controller.getSession(second)).toBeUndefined();
+      expect([sessionA.detached, sessionB.detached]).toEqual([1, 1]);
+      expect([sessionA.disposed, sessionB.disposed]).toEqual([0, 0]);
+      expect(killAllCalls).toHaveLength(1);
+    });
+
+    test("still asks the backend when no tab is open, in case a shell leaked", () => {
+      const { controller, killAllCalls } = setup();
+
+      controller.closeAll();
+
+      expect(killAllCalls).toHaveLength(1);
+    });
+
+    test("disposes a session that was still starting once it arrives", async () => {
+      const { store, controller, launches, settle } = setup();
+      const id = controller.openTab();
+      controller.closeAll();
+      const session = fakeSession();
+
+      launches[0]?.resolve(session);
+      await settle();
+
+      expect(session.disposed).toBe(1);
+      expect(controller.getSession(id)).toBeUndefined();
+      expect(store.getState().tabs).toEqual([]);
+    });
+
+    test("leaves tabs opened afterwards alone", async () => {
+      const { store, controller, launches, settle } = setup();
+      controller.openTab();
+      controller.closeAll();
+      const later = controller.openTab();
+      const session = fakeSession();
+      launches[1]?.resolve(session);
+      await settle();
+
+      expect(controller.getSession(later)).toBe(session);
+      expect(store.getState().tabs.map((tab) => tab.id)).toEqual([later]);
+    });
+
+    test("reports a failing backend close without throwing", async () => {
+      const { controller, killAllCalls, settle } = setup();
+
+      controller.closeAll();
+      killAllCalls[0]?.reject(new Error("could not stop a shell"));
+      await settle();
+
+      expect(consoleError).toHaveBeenCalled();
+    });
   });
 });

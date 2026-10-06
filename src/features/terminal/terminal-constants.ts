@@ -15,4 +15,5 @@ export const PTY_COMMANDS = {
   write: "pty_write",
   resize: "pty_resize",
   kill: "pty_kill",
+  killAll: "pty_kill_all",
 } as const;

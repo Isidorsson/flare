@@ -1,6 +1,7 @@
 mod bridge;
 pub mod fs;
 mod graph;
+mod proctree;
 mod pty;
 
 use tauri::{AppHandle, Manager, RunEvent};
@@ -32,6 +33,7 @@ pub fn run() {
             pty::commands::pty_write,
             pty::commands::pty_resize,
             pty::commands::pty_kill,
+            pty::commands::pty_kill_all,
         ])
         .setup(|app| {
             graph::watch::spawn(app.handle().clone());
