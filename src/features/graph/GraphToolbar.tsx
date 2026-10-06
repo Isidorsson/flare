@@ -1,14 +1,15 @@
 import { Radar, RefreshCw, TriangleAlert } from "lucide-react";
 
 import { IconButton } from "@/shared/ui/IconButton";
+import { Tooltip } from "@/shared/ui/Tooltip";
 
 import { GraphCameraControls } from "./GraphCameraControls";
 import type { ColorBy } from "./graph-store";
 import { graphStore, useGraph } from "./use-graph";
 
-const COLOR_MODES: readonly { value: ColorBy; label: string }[] = [
-  { value: "language", label: "Language" },
-  { value: "directory", label: "Folder" },
+const COLOR_MODES: readonly { value: ColorBy; label: string; hint: string }[] = [
+  { value: "language", label: "Language", hint: "Colour nodes by programming language" },
+  { value: "directory", label: "Folder", hint: "Colour nodes by the folder they are in" },
 ];
 
 const NO_WARNINGS: readonly string[] = [];
@@ -17,20 +18,21 @@ function ColorModeSwitch() {
   const colorBy = useGraph((state) => state.colorBy);
   return (
     <div role="group" aria-label="Colour nodes by" className="flex rounded-md border border-border bg-surface-1 p-0.5">
-      {COLOR_MODES.map(({ value, label }) => (
-        <button
-          key={value}
-          type="button"
-          aria-pressed={colorBy === value}
-          onClick={() => {
-            graphStore.getState().setColorBy(value);
-          }}
-          className={`rounded-sm px-2 py-0.5 text-xs transition-colors ${
-            colorBy === value ? "bg-surface-3 text-fg" : "text-fg-muted hover:text-fg"
-          }`}
-        >
-          {label}
-        </button>
+      {COLOR_MODES.map(({ value, label, hint }) => (
+        <Tooltip key={value} content={hint}>
+          <button
+            type="button"
+            aria-pressed={colorBy === value}
+            onClick={() => {
+              graphStore.getState().setColorBy(value);
+            }}
+            className={`rounded-sm px-2 py-0.5 text-xs transition-colors ${
+              colorBy === value ? "bg-surface-3 text-fg" : "text-fg-muted hover:text-fg"
+            }`}
+          >
+            {label}
+          </button>
+        </Tooltip>
       ))}
     </div>
   );
@@ -40,14 +42,16 @@ function WarningBadge() {
   const warnings = useGraph((state) => state.snapshot?.warnings ?? NO_WARNINGS);
   if (warnings.length === 0) return null;
   return (
-    <span
-      role="img"
-      aria-label={`${warnings.length} indexing warnings`}
-      title={warnings.join("\n")}
-      className="inline-flex size-7 items-center justify-center text-warning"
-    >
-      <TriangleAlert aria-hidden className="size-4" />
-    </span>
+    <Tooltip content="Some files could not be indexed" detail={warnings.join("\n")}>
+      <span
+        role="img"
+        tabIndex={0}
+        aria-label={`${warnings.length} indexing warnings`}
+        className="inline-flex size-7 items-center justify-center text-warning"
+      >
+        <TriangleAlert aria-hidden className="size-4" />
+      </span>
+    </Tooltip>
   );
 }
 
@@ -75,7 +79,7 @@ export function GraphToolbar() {
         <GraphCameraControls />
         <IconButton
           icon={Radar}
-          label="Blast radius"
+          label="Show blast radius of a file"
           aria-pressed={blastMode}
           onClick={() => {
             graphStore.getState().setMode(blastMode ? "explore" : "blast");
@@ -84,8 +88,8 @@ export function GraphToolbar() {
         />
         <IconButton
           icon={RefreshCw}
-          label="Reindex"
-          disabled={loading}
+          label="Reindex the project"
+          disabledReason={loading ? "Indexing is already running" : undefined}
           onClick={() => {
             void graphStore.getState().reindex();
           }}

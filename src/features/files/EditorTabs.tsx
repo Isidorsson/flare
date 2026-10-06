@@ -1,6 +1,8 @@
 import { X } from "lucide-react";
 import { useState } from "react";
 
+import { Tooltip } from "@/shared/ui/Tooltip";
+
 import { isDirty, type OpenFile } from "./files-types";
 import { isPulsing, type HeatEntry } from "./live/heat";
 import type { TouchKind } from "./live/live-types";
@@ -46,20 +48,30 @@ function CloseButton({ file, dirty, onClose }: { file: OpenFile; dirty: boolean;
   }
 
   return (
-    <button
-      type="button"
-      aria-label={confirming ? `Discard changes to ${name}` : `Close ${name}`}
-      onClick={handleClose}
-      onBlur={() => {
-        setConfirming(false);
-      }}
-      className={`mr-1 flex h-5 items-center justify-center rounded text-fg-subtle transition-colors hover:bg-surface-3 hover:text-fg ${
-        confirming ? "px-1.5 text-[10px] text-danger" : "w-5"
-      }`}
+    <Tooltip
+      content={confirming ? "Press again to discard the unsaved changes" : "Close this file"}
+      detail={dirty && !confirming ? "It has unsaved changes, so you are asked first" : undefined}
     >
-      {confirming ? "Discard?" : <X aria-hidden className="size-3" />}
-    </button>
+      <button
+        type="button"
+        aria-label={confirming ? `Discard changes to ${name}` : `Close ${name}`}
+        onClick={handleClose}
+        onBlur={() => {
+          setConfirming(false);
+        }}
+        className={`mr-1 flex h-5 items-center justify-center rounded text-fg-subtle transition-colors hover:bg-surface-3 hover:text-fg ${
+          confirming ? "px-1.5 text-[10px] text-danger" : "w-5"
+        }`}
+      >
+        {confirming ? "Discard?" : <X aria-hidden className="size-3" />}
+      </button>
+    </Tooltip>
   );
+}
+
+function tabDetail(file: OpenFile, dirty: boolean): string | undefined {
+  if (dirty) return "Unsaved changes";
+  return file.preview ? "Preview tab, replaced when you preview another file" : undefined;
 }
 
 interface TabProps {
@@ -75,20 +87,21 @@ function Tab({ file, selected, activity, onActivate, onClose }: TabProps) {
   const tone = selected ? "bg-surface-1 text-fg" : "text-fg-muted hover:text-fg";
   return (
     <div role="presentation" className={`group flex h-8 shrink-0 items-center border-b-2 ${underline(selected, activity)} ${tone}`}>
-      <button
-        type="button"
-        role="tab"
-        aria-selected={selected}
-        title={file.path}
-        onClick={() => {
-          onActivate(file.path);
-        }}
-        className={`flex h-full max-w-44 items-center gap-1.5 pr-1 pl-3 text-xs ${file.preview ? "italic" : ""}`}
-      >
-        <span className="truncate">{baseName(file.path)}</span>
-        {dirty ? <span role="img" aria-label="Unsaved changes" className="size-1.5 shrink-0 rounded-full bg-accent" /> : null}
-        {activity?.pulsing === true ? <ActivityDot key={activity.entry.touchedAt} entry={activity.entry} /> : null}
-      </button>
+      <Tooltip content={file.path} detail={tabDetail(file, dirty)}>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={selected}
+          onClick={() => {
+            onActivate(file.path);
+          }}
+          className={`flex h-full max-w-44 items-center gap-1.5 pr-1 pl-3 text-xs ${file.preview ? "italic" : ""}`}
+        >
+          <span className="truncate">{baseName(file.path)}</span>
+          {dirty ? <span role="img" aria-label="Unsaved changes" className="size-1.5 shrink-0 rounded-full bg-accent" /> : null}
+          {activity?.pulsing === true ? <ActivityDot key={activity.entry.touchedAt} entry={activity.entry} /> : null}
+        </button>
+      </Tooltip>
       <CloseButton file={file} dirty={dirty} onClose={onClose} />
     </div>
   );

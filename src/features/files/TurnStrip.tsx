@@ -1,5 +1,7 @@
 import { useMemo } from "react";
 
+import { Tooltip } from "@/shared/ui/Tooltip";
+
 import { agentActivity } from "./live/use-live";
 import { summarizeTurn, type TurnFile } from "./live/turn-summary";
 import { baseName, relativeTo } from "./paths";
@@ -9,17 +11,18 @@ function Chip({ file, root }: { file: TurnFile; root: string | null }) {
   const created = file.kind === "create";
   const shown = root === null ? file.path : relativeTo(root, file.path);
   return (
-    <button
-      type="button"
-      title={`${shown}\n${created ? "Created" : "Edited"} this turn. Click to replay the change.`}
-      onClick={() => {
-        agentActivity.replay(file.path);
-      }}
-      className="flex h-5 shrink-0 items-center gap-1.5 rounded-full border border-border bg-surface-2 px-2 text-[11px] text-fg-muted transition-colors hover:border-border-strong hover:text-fg"
-    >
-      <span aria-hidden className={`size-1.5 rounded-full ${created ? "bg-success" : "bg-agent"}`} />
-      {baseName(file.path)}
-    </button>
+    <Tooltip content="Replay this change in the editor" detail={`${shown}\n${created ? "Created" : "Edited"} this turn`}>
+      <button
+        type="button"
+        onClick={() => {
+          agentActivity.replay(file.path);
+        }}
+        className="flex h-5 shrink-0 items-center gap-1.5 rounded-full border border-border bg-surface-2 px-2 text-[11px] text-fg-muted transition-colors hover:border-border-strong hover:text-fg"
+      >
+        <span aria-hidden className={`size-1.5 rounded-full ${created ? "bg-success" : "bg-agent"}`} />
+        {baseName(file.path)}
+      </button>
+    </Tooltip>
   );
 }
 

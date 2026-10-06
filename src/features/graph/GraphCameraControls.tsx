@@ -1,6 +1,7 @@
 import { Crosshair } from "lucide-react";
 
 import { IconButton } from "@/shared/ui/IconButton";
+import { Tooltip } from "@/shared/ui/Tooltip";
 
 import { graphStore, useGraph } from "./use-graph";
 
@@ -8,15 +9,17 @@ const ACTIVE_CLASS = "bg-accent-soft! text-accent! hover:bg-accent-soft! hover:t
 
 function FitButton() {
   return (
-    <button
-      type="button"
-      onClick={() => {
-        graphStore.getState().fitCamera();
-      }}
-      className="rounded-sm bg-surface-3 px-2 py-0.5 text-xs text-fg transition-colors hover:bg-border-strong"
-    >
-      Fit
-    </button>
+    <Tooltip content="Fit the whole graph in view">
+      <button
+        type="button"
+        onClick={() => {
+          graphStore.getState().fitCamera();
+        }}
+        className="rounded-sm bg-surface-3 px-2 py-0.5 text-xs text-fg transition-colors hover:bg-border-strong"
+      >
+        Fit
+      </button>
+    </Tooltip>
   );
 }
 
@@ -28,7 +31,7 @@ export function GraphCameraControls() {
       {autoFit ? null : <FitButton />}
       <IconButton
         icon={Crosshair}
-        label="Follow agent"
+        label="Follow the agent's position"
         aria-pressed={follow}
         onClick={() => {
           graphStore.getState().toggleFollow();

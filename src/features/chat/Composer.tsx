@@ -4,6 +4,7 @@ import { useState, type KeyboardEvent, type SubmitEvent } from "react";
 import { selectComposerMode, type ComposerMode } from "@/features/agent/agent-selectors";
 import { useAgent } from "@/features/agent/use-agent";
 import { useWorkspace } from "@/features/workspace/use-workspace";
+import { SHORTCUTS } from "@/shared/lib/shortcuts";
 import { IconButton } from "@/shared/ui/IconButton";
 
 import { SessionPicker } from "./SessionPicker";
@@ -19,8 +20,14 @@ const HINTS: Record<ComposerMode, string> = {
   "no-folder": "Pick a project folder in the sidebar so Claude knows where to work.",
   blocked: "Switch back to the running thread to stop it first.",
   running: "Press stop to interrupt the current turn.",
-  ready: "Enter sends, Shift+Enter adds a new line.",
+  ready: `${SHORTCUTS.send} sends, ${SHORTCUTS.newLine} adds a new line.`,
 };
+
+function sendBlockedReason(mode: ComposerMode, draft: string): string | undefined {
+  if (mode === "no-folder") return "Open a project folder first";
+  if (mode === "blocked") return "Another thread is running";
+  return draft.trim() === "" ? "Write a message first" : undefined;
+}
 
 export function Composer() {
   const root = useWorkspace((state) => state.root);
@@ -63,9 +70,16 @@ export function Composer() {
           className="min-h-10 max-h-48 flex-1 resize-none bg-transparent px-2 py-1 text-sm text-fg outline-none select-text placeholder:text-fg-subtle disabled:cursor-not-allowed"
         />
         {mode === "running" ? (
-          <IconButton icon={Square} label="Stop" onClick={interrupt} className="text-danger" />
+          <IconButton icon={Square} label="Stop the current turn" side="top" onClick={interrupt} className="text-danger" />
         ) : (
-          <IconButton icon={SendHorizontal} label="Send message" type="submit" disabled={!canType || draft.trim() === ""} />
+          <IconButton
+            icon={SendHorizontal}
+            label="Send message"
+            shortcut={SHORTCUTS.send}
+            side="top"
+            type="submit"
+            disabledReason={sendBlockedReason(mode, draft)}
+          />
         )}
       </div>
       <div className="flex flex-wrap items-center justify-between gap-2">

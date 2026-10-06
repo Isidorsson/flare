@@ -1,5 +1,7 @@
 import { useRef, type KeyboardEvent } from "react";
 
+import { Tooltip } from "@/shared/ui/Tooltip";
+
 import { TAB_TITLE_MAX_LENGTH } from "./terminal-constants";
 
 interface TabTitleInputProps {
@@ -23,19 +25,21 @@ export function TabTitleInput({ initialTitle, onCommit, onCancel }: TabTitleInpu
   };
 
   return (
-    <input
-      autoFocus
-      aria-label="Terminal name"
-      defaultValue={initialTitle}
-      maxLength={TAB_TITLE_MAX_LENGTH}
-      onFocus={(event) => {
-        event.currentTarget.select();
-      }}
-      onKeyDown={handleKeyDown}
-      onBlur={(event) => {
-        settle(() => { onCommit(event.currentTarget.value); });
-      }}
-      className="h-6 w-28 rounded-sm border border-accent bg-surface-3 px-1.5 text-xs text-fg outline-none"
-    />
+    <Tooltip content="Press Enter to rename, Escape to cancel" side="top">
+      <input
+        autoFocus
+        aria-label="Terminal name"
+        defaultValue={initialTitle}
+        maxLength={TAB_TITLE_MAX_LENGTH}
+        onFocus={(event) => {
+          event.currentTarget.select();
+        }}
+        onKeyDown={handleKeyDown}
+        onBlur={(event) => {
+          settle(() => { onCommit(event.currentTarget.value); });
+        }}
+        className="h-6 w-28 rounded-sm border border-accent bg-surface-3 px-1.5 text-xs text-fg outline-none"
+      />
+    </Tooltip>
   );
 }

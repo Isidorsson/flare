@@ -43,11 +43,32 @@ export const EFFORT_LABELS: Record<Effort, string> = {
   max: "Max",
 };
 
+export const MODEL_DESCRIPTIONS: Record<Model, string> = {
+  opus: "Most capable, best for hard problems",
+  sonnet: "Balanced speed and capability for everyday work",
+  haiku: "Fastest and lightest",
+};
+
+export const EFFORT_DESCRIPTIONS: Record<Effort, string> = {
+  low: "Quick answers with minimal thinking",
+  medium: "Balanced thinking for most tasks",
+  high: "Thinks harder before it answers",
+  xhigh: "Even deeper reasoning for hard tasks",
+  max: "Deepest reasoning, slowest and most costly",
+};
+
 export const PERMISSION_MODE_LABELS: Record<PermissionMode, string> = {
   auto: "Auto",
   default: "Ask before edits",
   acceptEdits: "Accept edits",
   plan: "Plan only",
+};
+
+export const PERMISSION_MODE_DESCRIPTIONS: Record<PermissionMode, string> = {
+  auto: "Claude approves routine actions itself and asks about risky ones",
+  default: "Claude asks before it edits files or runs commands",
+  acceptEdits: "File edits go through automatically; other actions still ask",
+  plan: "Claude researches and proposes a plan without changing anything",
 };
 
 export function outputStyleLabel(name: string): string {

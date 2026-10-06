@@ -6,6 +6,7 @@ import { useAgent } from "@/features/agent/use-agent";
 import { useWorkspace } from "@/features/workspace/use-workspace";
 import { describeError } from "@/shared/lib/describe-error";
 import { baseName } from "@/shared/lib/path-name";
+import { Tooltip } from "@/shared/ui/Tooltip";
 
 export function OpenFolderButton() {
   const root = useWorkspace((state) => state.root);
@@ -33,16 +34,21 @@ export function OpenFolderButton() {
 
   return (
     <div className="border-b border-border p-2">
-      <button
-        type="button"
-        onClick={pickFolder}
-        title={root ?? "Open a project folder"}
-        className="flex h-9 w-full items-center gap-2 rounded-md px-2 text-left text-sm text-fg-muted transition-colors hover:bg-surface-3 hover:text-fg"
+      <Tooltip
+        content={root === null ? "Open a project folder for Claude to work in" : "Change the project folder"}
+        detail={root ?? undefined}
+        side="right"
       >
-        <FolderOpen aria-hidden className="size-4 shrink-0" />
-        <span className="min-w-0 flex-1 truncate">{root === null ? "Open folder" : baseName(root)}</span>
-        {root !== null && <span className="shrink-0 text-xs text-fg-subtle">Change</span>}
-      </button>
+        <button
+          type="button"
+          onClick={pickFolder}
+          className="flex h-9 w-full items-center gap-2 rounded-md px-2 text-left text-sm text-fg-muted transition-colors hover:bg-surface-3 hover:text-fg"
+        >
+          <FolderOpen aria-hidden className="size-4 shrink-0" />
+          <span className="min-w-0 flex-1 truncate">{root === null ? "Open folder" : baseName(root)}</span>
+          {root !== null && <span className="shrink-0 text-xs text-fg-subtle">Change</span>}
+        </button>
+      </Tooltip>
       {error !== null && (
         <p role="alert" className="px-2 pt-1 text-xs text-danger">
           {error}

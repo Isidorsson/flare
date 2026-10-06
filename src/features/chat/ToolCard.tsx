@@ -14,8 +14,9 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 
-import type { ToolItem, ToolStatus, TouchedFile } from "@/features/agent/thread-types";
+import type { ToolItem, ToolStatus, TouchedAction, TouchedFile } from "@/features/agent/thread-types";
 import { baseName } from "@/shared/lib/path-name";
+import { Tooltip } from "@/shared/ui/Tooltip";
 
 import { formatToolInput, previewToolInput } from "./tool-preview";
 
@@ -31,6 +32,12 @@ const TOOL_ICONS: Record<string, LucideIcon> = {
   Glob: Search,
   WebFetch: Globe,
   WebSearch: Globe,
+};
+
+const TOUCH_DESCRIPTIONS: Record<TouchedAction, string> = {
+  read: "Read by this tool call",
+  create: "Created by this tool call",
+  update: "Edited by this tool call",
 };
 
 const STATUS_LABELS: Record<ToolStatus, string> = {
@@ -52,12 +59,12 @@ function TouchedList({ files }: { files: TouchedFile[] }) {
   return (
     <ul className="flex flex-wrap gap-1.5">
       {files.map((file) => (
-        <li
-          key={`${file.action}:${file.path}`}
-          title={file.path}
-          className="rounded-md bg-surface-3 px-1.5 py-0.5 font-mono text-[11px] text-fg-muted"
-        >
-          {file.action} {baseName(file.path)}
+        <li key={`${file.action}:${file.path}`}>
+          <Tooltip content={TOUCH_DESCRIPTIONS[file.action]} detail={file.path}>
+            <span className="block rounded-md bg-surface-3 px-1.5 py-0.5 font-mono text-[11px] text-fg-muted">
+              {file.action} {baseName(file.path)}
+            </span>
+          </Tooltip>
         </li>
       ))}
     </ul>
@@ -79,13 +86,15 @@ export function ToolCard({ item }: { item: ToolItem }) {
 
   return (
     <details className="group rounded-lg border border-border bg-surface-1">
-      <summary className="flex cursor-default list-none items-center gap-2 px-3 py-2 text-xs marker:hidden [&::-webkit-details-marker]:hidden">
-        <ChevronRight aria-hidden className="size-3.5 shrink-0 text-fg-subtle transition-transform group-open:rotate-90" />
-        <Icon aria-hidden className="size-3.5 shrink-0 text-fg-muted" />
-        <span className="shrink-0 font-medium text-fg">{item.name}</span>
-        <span className="min-w-0 flex-1 truncate font-mono text-fg-muted">{preview}</span>
-        <StatusIcon status={item.status} />
-      </summary>
+      <Tooltip content="Show or hide the input and result" side="top">
+        <summary className="flex cursor-default list-none items-center gap-2 px-3 py-2 text-xs marker:hidden [&::-webkit-details-marker]:hidden">
+          <ChevronRight aria-hidden className="size-3.5 shrink-0 text-fg-subtle transition-transform group-open:rotate-90" />
+          <Icon aria-hidden className="size-3.5 shrink-0 text-fg-muted" />
+          <span className="shrink-0 font-medium text-fg">{item.name}</span>
+          <span className="min-w-0 flex-1 truncate font-mono text-fg-muted">{preview}</span>
+          <StatusIcon status={item.status} />
+        </summary>
+      </Tooltip>
       <div className="space-y-3 border-t border-border px-3 py-3 select-text">
         {item.touched.length > 0 && <TouchedList files={item.touched} />}
         <Section title="Input">

@@ -2,7 +2,16 @@ import { EFFORT_LEVELS, type Effort } from "@flare/protocol";
 import { Check, ChevronDown, ChevronRight } from "lucide-react";
 import { useId, useRef, useState } from "react";
 
-import { EFFORT_LABELS, MODEL_IDS, MODEL_LABELS, type Model } from "@/features/agent/session-settings";
+import {
+  EFFORT_DESCRIPTIONS,
+  EFFORT_LABELS,
+  MODEL_DESCRIPTIONS,
+  MODEL_IDS,
+  MODEL_LABELS,
+  type Model,
+} from "@/features/agent/session-settings";
+import { anchorNameFor } from "@/shared/ui/anchor-name";
+import { Tooltip } from "@/shared/ui/Tooltip";
 
 interface ModelEffortMenuProps {
   model: Model;
@@ -15,22 +24,24 @@ const ITEM =
 
 export function ModelEffortMenu({ model, effort, onChange }: ModelEffortMenuProps) {
   const menuId = useId();
-  const anchor = `--model-menu-${menuId.replaceAll(":", "")}`;
+  const anchor = anchorNameFor("model-menu", menuId);
   const popover = useRef<HTMLDivElement>(null);
   const [highlighted, setHighlighted] = useState<Model>(model);
 
   return (
     <>
-      <button
-        type="button"
-        popoverTarget={menuId}
-        style={{ anchorName: anchor }}
-        className="flex h-6 items-center gap-1 rounded-md border border-border bg-surface-2 px-1.5 text-xs text-fg hover:border-border-strong focus-visible:border-accent focus-visible:outline-none"
-      >
-        {MODEL_LABELS[model]}
-        <span className="text-fg-subtle">· {EFFORT_LABELS[effort]}</span>
-        <ChevronDown aria-hidden className="size-3 text-fg-subtle" />
-      </button>
+      <Tooltip content="Choose the model and how hard it thinks" side="top">
+        <button
+          type="button"
+          popoverTarget={menuId}
+          style={{ anchorName: anchor }}
+          className="flex h-6 items-center gap-1 rounded-md border border-border bg-surface-2 px-1.5 text-xs text-fg hover:border-border-strong focus-visible:border-accent focus-visible:outline-none"
+        >
+          {MODEL_LABELS[model]}
+          <span className="text-fg-subtle">· {EFFORT_LABELS[effort]}</span>
+          <ChevronDown aria-hidden className="size-3 text-fg-subtle" />
+        </button>
+      </Tooltip>
       <div
         id={menuId}
         ref={popover}
@@ -62,22 +73,24 @@ function ModelList({ highlighted, onHighlight }: { highlighted: Model; onHighlig
     <ul className="w-28">
       {MODEL_IDS.map((id) => (
         <li key={id}>
-          <button
-            type="button"
-            role="menuitem"
-            aria-haspopup="menu"
-            aria-expanded={id === highlighted}
-            onPointerEnter={() => {
-              onHighlight(id);
-            }}
-            onFocus={() => {
-              onHighlight(id);
-            }}
-            className={`${ITEM} ${id === highlighted ? "bg-surface-3" : ""}`}
-          >
-            <span className="flex-1">{MODEL_LABELS[id]}</span>
-            <ChevronRight aria-hidden className="size-3 text-fg-subtle" />
-          </button>
+          <Tooltip content={MODEL_DESCRIPTIONS[id]} detail="Pick an effort level to switch to it" side="left">
+            <button
+              type="button"
+              role="menuitem"
+              aria-haspopup="menu"
+              aria-expanded={id === highlighted}
+              onPointerEnter={() => {
+                onHighlight(id);
+              }}
+              onFocus={() => {
+                onHighlight(id);
+              }}
+              className={`${ITEM} ${id === highlighted ? "bg-surface-3" : ""}`}
+            >
+              <span className="flex-1">{MODEL_LABELS[id]}</span>
+              <ChevronRight aria-hidden className="size-3 text-fg-subtle" />
+            </button>
+          </Tooltip>
         </li>
       ))}
     </ul>
@@ -95,18 +108,20 @@ function EffortList({ model, checked, onChoose }: EffortListProps) {
     <ul role="menu" aria-label={`${MODEL_LABELS[model]} effort`} className="w-32 border-l border-border pl-1">
       {EFFORT_LEVELS.map((level) => (
         <li key={level}>
-          <button
-            type="button"
-            role="menuitemradio"
-            aria-checked={level === checked}
-            onClick={() => {
-              onChoose(level);
-            }}
-            className={ITEM}
-          >
-            <span className="flex-1">{EFFORT_LABELS[level]}</span>
-            {level === checked ? <Check aria-hidden className="size-3 text-accent" /> : null}
-          </button>
+          <Tooltip content={EFFORT_DESCRIPTIONS[level]} side="right">
+            <button
+              type="button"
+              role="menuitemradio"
+              aria-checked={level === checked}
+              onClick={() => {
+                onChoose(level);
+              }}
+              className={ITEM}
+            >
+              <span className="flex-1">{EFFORT_LABELS[level]}</span>
+              {level === checked ? <Check aria-hidden className="size-3 text-accent" /> : null}
+            </button>
+          </Tooltip>
         </li>
       ))}
     </ul>

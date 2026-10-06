@@ -1,6 +1,8 @@
 import { ChevronDown, ChevronRight, File, Folder, FolderOpen } from "lucide-react";
 import { useMemo, type KeyboardEvent } from "react";
 
+import { Tooltip } from "@/shared/ui/Tooltip";
+
 import type { HeatEntry } from "./live/heat";
 import { useHeatView } from "./live/use-heat";
 import { treeKeyAction } from "./tree-keys";
@@ -22,9 +24,12 @@ interface EntryRowViewProps {
   onOpen: (path: string, pinned: boolean) => void;
 }
 
-function rowTitle(path: string, heat: HeatEntry | undefined): string {
-  if (heat === undefined) return path;
-  return `${path}\n${heat.kind === "edit" ? "Edited" : "Read"} by the agent`;
+function rowTip(row: EntryRow, heat: HeatEntry | undefined): { content: string; detail: string } {
+  const { entry } = row;
+  const touched = heat === undefined ? [] : [`${heat.kind === "edit" ? "Edited" : "Read"} by the agent`];
+  const detail = [entry.path, ...touched].join("\n");
+  if (entry.kind === "file") return { content: "Preview this file, or double-click to keep it open", detail };
+  return { content: row.expanded ? "Collapse this folder" : "Expand this folder", detail };
 }
 
 function rowClassName(selected: boolean, heat: HeatEntry | undefined): string {
@@ -66,35 +71,36 @@ function EntryRowView({ row, selected, heat, spark, focusable, onToggle, onOpen 
   const { entry } = row;
   const isDir = entry.kind === "dir";
   return (
-    <button
-      type="button"
-      role="treeitem"
-      aria-level={row.depth + 1}
-      aria-selected={selected}
-      aria-expanded={isDir ? row.expanded : undefined}
-      tabIndex={focusable ? 0 : -1}
-      data-path={entry.path}
-      data-kind={entry.kind}
-      title={rowTitle(entry.path, heat)}
-      style={{ paddingLeft: BASE_PADDING_PX + row.depth * INDENT_PX }}
-      onClick={() => {
-        if (isDir) onToggle(entry.path);
-        else onOpen(entry.path, false);
-      }}
-      onDoubleClick={() => {
-        if (!isDir) onOpen(entry.path, true);
-      }}
-      {...heatAttributes(heat)}
-      className={rowClassName(selected, heat)}
-    >
-      {spark ? <span aria-hidden className="flare-spark" /> : null}
-      <span aria-hidden className="flex size-3.5 shrink-0 items-center justify-center">
-        <Chevron row={row} />
-      </span>
-      <RowIcon row={row} />
-      <span className="min-w-0 flex-1 truncate">{entry.name}</span>
-      {heat === undefined ? null : <RecencyBadge heat={heat} />}
-    </button>
+    <Tooltip {...rowTip(row, heat)} side="right">
+      <button
+        type="button"
+        role="treeitem"
+        aria-level={row.depth + 1}
+        aria-selected={selected}
+        aria-expanded={isDir ? row.expanded : undefined}
+        tabIndex={focusable ? 0 : -1}
+        data-path={entry.path}
+        data-kind={entry.kind}
+        style={{ paddingLeft: BASE_PADDING_PX + row.depth * INDENT_PX }}
+        onClick={() => {
+          if (isDir) onToggle(entry.path);
+          else onOpen(entry.path, false);
+        }}
+        onDoubleClick={() => {
+          if (!isDir) onOpen(entry.path, true);
+        }}
+        {...heatAttributes(heat)}
+        className={rowClassName(selected, heat)}
+      >
+        {spark ? <span aria-hidden className="flare-spark" /> : null}
+        <span aria-hidden className="flex size-3.5 shrink-0 items-center justify-center">
+          <Chevron row={row} />
+        </span>
+        <RowIcon row={row} />
+        <span className="min-w-0 flex-1 truncate">{entry.name}</span>
+        {heat === undefined ? null : <RecencyBadge heat={heat} />}
+      </button>
+    </Tooltip>
   );
 }
 

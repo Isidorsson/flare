@@ -16,7 +16,7 @@ export function ThreadsSidebar() {
           <Flame aria-hidden className="size-4 text-accent" />
           <span className="text-sm font-semibold tracking-tight">Flare</span>
         </div>
-        <IconButton icon={SquarePen} label="New thread" onClick={newThread} />
+        <IconButton icon={SquarePen} label="Start a new thread" onClick={newThread} />
       </header>
       <OpenFolderButton />
       <nav aria-label="Threads" className="flex min-h-0 flex-1 flex-col">

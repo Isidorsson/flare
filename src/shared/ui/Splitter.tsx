@@ -1,6 +1,7 @@
 import { useState, type KeyboardEvent, type PointerEvent } from "react";
 
 import { sizeAfterDrag, sizeAfterKey, type SizeBounds, type SplitterEdge } from "../lib/splitter-math";
+import { Tooltip, type TooltipSide } from "./Tooltip";
 
 interface SplitterProps {
   edge: SplitterEdge;
@@ -20,6 +21,14 @@ const EDGE_CLASSES: Record<SplitterEdge, string> = {
   left: "inset-y-0 -left-px w-[3px] cursor-col-resize before:inset-y-0 before:-inset-x-1",
   top: "inset-x-0 -top-px h-[3px] cursor-row-resize before:inset-x-0 before:-inset-y-1",
 };
+
+const TOOLTIP_SIDE: Record<SplitterEdge, TooltipSide> = {
+  right: "right",
+  left: "left",
+  top: "top",
+};
+
+const RESIZE_HINT = "Drag to resize, arrow keys to nudge";
 
 function pointerPosition(edge: SplitterEdge, event: PointerEvent): number {
   return edge === "top" ? event.clientY : event.clientX;
@@ -49,21 +58,23 @@ export function Splitter({ edge, label, value, bounds, onResize }: SplitterProps
 
   const active = drag !== null;
   return (
-    <div
-      role="separator"
-      tabIndex={0}
-      aria-label={label}
-      aria-orientation={edge === "top" ? "horizontal" : "vertical"}
-      aria-valuenow={Math.round(value)}
-      aria-valuemin={bounds.min}
-      aria-valuemax={bounds.max}
-      onPointerDown={handlePointerDown}
-      onPointerMove={handlePointerMove}
-      onLostPointerCapture={() => {
-        setDrag(null);
-      }}
-      onKeyDown={handleKeyDown}
-      className={`absolute z-20 touch-none transition-colors before:absolute hover:bg-accent focus-visible:bg-accent focus-visible:outline-none ${EDGE_CLASSES[edge]} ${active ? "bg-accent" : "bg-transparent"}`}
-    />
+    <Tooltip content={label} detail={RESIZE_HINT} side={TOOLTIP_SIDE[edge]}>
+      <div
+        role="separator"
+        tabIndex={0}
+        aria-label={label}
+        aria-orientation={edge === "top" ? "horizontal" : "vertical"}
+        aria-valuenow={Math.round(value)}
+        aria-valuemin={bounds.min}
+        aria-valuemax={bounds.max}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onLostPointerCapture={() => {
+          setDrag(null);
+        }}
+        onKeyDown={handleKeyDown}
+        className={`absolute z-20 touch-none transition-colors before:absolute hover:bg-accent focus-visible:bg-accent focus-visible:outline-none ${EDGE_CLASSES[edge]} ${active ? "bg-accent" : "bg-transparent"}`}
+      />
+    </Tooltip>
   );
 }

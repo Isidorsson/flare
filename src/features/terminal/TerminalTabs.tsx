@@ -1,6 +1,9 @@
 import { X } from "lucide-react";
 import { useState, type KeyboardEvent, type MouseEvent } from "react";
 
+import { SHORTCUTS } from "@/shared/lib/shortcuts";
+import { Tooltip } from "@/shared/ui/Tooltip";
+
 import { TabTitleInput } from "./TabTitleInput";
 import { describeStatus, type TabStatus, type TerminalTab } from "./terminal-store";
 
@@ -64,6 +67,10 @@ interface TabItemProps {
   onStartRename: (id: string) => void;
 }
 
+function tabDetail(tab: TerminalTab): string {
+  return `${describeStatus(tab.status)}. Double-click or press ${SHORTCUTS.renameTerminal} to rename, middle-click to close.`;
+}
+
 function TabItem({ tab, active, onSelect, onClose, onStartRename }: TabItemProps) {
   const handleKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
     if (event.key === "F2") onStartRename(tab.id);
@@ -80,34 +87,37 @@ function TabItem({ tab, active, onSelect, onClose, onStartRename }: TabItemProps
         active ? "bg-surface-3 text-fg" : "text-fg-muted hover:bg-surface-2 hover:text-fg"
       }`}
     >
-      <button
-        type="button"
-        role="tab"
-        aria-selected={active}
-        title={`${tab.title} (${describeStatus(tab.status)}). Double-click or F2 to rename.`}
-        onClick={() => {
-          onSelect(tab.id);
-        }}
-        onDoubleClick={() => {
-          onStartRename(tab.id);
-        }}
-        onKeyDown={handleKeyDown}
-        onAuxClick={handleAuxClick}
-        className="flex h-full max-w-40 items-center gap-1.5 pr-1 pl-2"
-      >
-        <span aria-hidden className={`size-1.5 shrink-0 rounded-full ${STATUS_DOT_CLASS[tab.status.kind]}`} />
-        <span className="truncate">{tab.title}</span>
-      </button>
-      <button
-        type="button"
-        aria-label={`Close ${tab.title}`}
-        onClick={() => {
-          onClose(tab.id);
-        }}
-        className="mr-1 inline-flex size-4 items-center justify-center rounded-sm text-fg-subtle hover:bg-surface-1 hover:text-fg"
-      >
-        <X aria-hidden className="size-3" />
-      </button>
+      <Tooltip content={tab.title} detail={tabDetail(tab)} side="top">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={active}
+          onClick={() => {
+            onSelect(tab.id);
+          }}
+          onDoubleClick={() => {
+            onStartRename(tab.id);
+          }}
+          onKeyDown={handleKeyDown}
+          onAuxClick={handleAuxClick}
+          className="flex h-full max-w-40 items-center gap-1.5 pr-1 pl-2"
+        >
+          <span aria-hidden className={`size-1.5 shrink-0 rounded-full ${STATUS_DOT_CLASS[tab.status.kind]}`} />
+          <span className="truncate">{tab.title}</span>
+        </button>
+      </Tooltip>
+      <Tooltip content={`Close ${tab.title}`} side="top">
+        <button
+          type="button"
+          aria-label={`Close ${tab.title}`}
+          onClick={() => {
+            onClose(tab.id);
+          }}
+          className="mr-1 inline-flex size-4 items-center justify-center rounded-sm text-fg-subtle hover:bg-surface-1 hover:text-fg"
+        >
+          <X aria-hidden className="size-3" />
+        </button>
+      </Tooltip>
     </div>
   );
 }

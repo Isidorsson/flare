@@ -1,3 +1,5 @@
+import { Tooltip } from "@/shared/ui/Tooltip";
+
 import { BLAST_TOKENS, LANGUAGE_TOKENS } from "./palette";
 import { baseName } from "./graph-paths";
 import { LANGUAGES, type Language } from "./graph-types";
@@ -27,23 +29,31 @@ const LANGUAGE_LABELS: Record<Language, string> = {
   svelte: "Svelte",
 };
 
-const BLAST_LEGEND = [
-  { token: BLAST_TOKENS.origin, label: "Selected" },
-  { token: BLAST_TOKENS.depths[0], label: "Direct" },
-  { token: BLAST_TOKENS.depths[1], label: "2 hops" },
-  { token: BLAST_TOKENS.depths[2], label: "3+ hops" },
-] as const;
+interface LegendItem {
+  token: string;
+  label: string;
+  hint: string;
+}
 
-function Swatch({ token, label }: { token: string; label: string }) {
+const BLAST_LEGEND: readonly LegendItem[] = [
+  { token: BLAST_TOKENS.origin, label: "Selected", hint: "The file you clicked" },
+  { token: BLAST_TOKENS.depths[0], label: "Direct", hint: "Files that import it directly" },
+  { token: BLAST_TOKENS.depths[1], label: "2 hops", hint: "Files that import the direct dependents" },
+  { token: BLAST_TOKENS.depths[2], label: "3+ hops", hint: "Files further up the import chain" },
+];
+
+function Swatch({ token, label, hint }: LegendItem) {
   return (
-    <li className="flex items-center gap-1.5">
-      <span aria-hidden className="size-2 rounded-full" style={{ backgroundColor: `var(${token})` }} />
-      {label}
-    </li>
+    <Tooltip content={hint} side="top">
+      <li className="flex items-center gap-1.5">
+        <span aria-hidden className="size-2 rounded-full" style={{ backgroundColor: `var(${token})` }} />
+        {label}
+      </li>
+    </Tooltip>
   );
 }
 
-function Legend({ items }: { items: readonly { token: string; label: string }[] }) {
+function Legend({ items }: { items: readonly LegendItem[] }) {
   return (
     <ul className="flex flex-wrap items-center gap-x-3 gap-y-1">
       {items.map((item) => (
@@ -77,11 +87,14 @@ function BlastFooter() {
 
 function LanguageLegend() {
   const present = useGraph((state) => state.snapshot?.nodes ?? null);
-  const used = new Set(present?.map((node) => node.language));
-  const items = LANGUAGES.filter((language) => used.has(language)).map((language) => ({
-    token: LANGUAGE_TOKENS[language],
-    label: LANGUAGE_LABELS[language],
-  }));
+  const counts = new Map<Language, number>();
+  for (const node of present ?? []) counts.set(node.language, (counts.get(node.language) ?? 0) + 1);
+  const items = LANGUAGES.flatMap((language) => {
+    const count = counts.get(language);
+    if (count === undefined) return [];
+    const label = LANGUAGE_LABELS[language];
+    return [{ token: LANGUAGE_TOKENS[language], label, hint: `${String(count)} ${label} ${count === 1 ? "file" : "files"}` }];
+  });
   return <Legend items={items} />;
 }
 

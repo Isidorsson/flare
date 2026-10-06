@@ -8,6 +8,7 @@ import { RIGHT_VIEWS, type RightView } from "@/features/shell/layout-constants";
 import { useLayout } from "@/features/shell/use-layout";
 import type { SizeBounds } from "@/shared/lib/splitter-math";
 import { Splitter } from "@/shared/ui/Splitter";
+import { Tooltip } from "@/shared/ui/Tooltip";
 
 interface ViewDefinition {
   label: string;
@@ -16,9 +17,9 @@ interface ViewDefinition {
 }
 
 const VIEWS: Record<RightView, ViewDefinition> = {
-  files: { label: "Files", hint: "File tree and editor", icon: FolderTree },
-  graph: { label: "Graph", hint: "Code graph of imports and agent activity", icon: Network },
-  split: { label: "Split", hint: "Files and graph side by side", icon: Columns2 },
+  files: { label: "Files", hint: "Show the file tree and editor", icon: FolderTree },
+  graph: { label: "Graph", hint: "Show the code graph of imports and agent activity", icon: Network },
+  split: { label: "Split", hint: "Show files and graph side by side", icon: Columns2 },
 };
 
 const tabId = (view: RightView) => `right-tab-${view}`;
@@ -44,20 +45,21 @@ function ViewTab({ view, selected, onSelect }: { view: RightView; selected: bool
   const { label, hint, icon: Icon } = VIEWS[view];
   const tone = selected ? "border-accent text-fg" : "border-transparent text-fg-muted hover:text-fg";
   return (
-    <button
-      id={tabId(view)}
-      type="button"
-      role="tab"
-      title={hint}
-      aria-selected={selected}
-      aria-controls={PANEL_ID}
-      tabIndex={selected ? 0 : -1}
-      onClick={onSelect}
-      className={`-mb-px flex h-9 items-center gap-2 border-b-2 px-3 text-sm transition-colors ${tone}`}
-    >
-      <Icon aria-hidden className="size-4" />
-      {label}
-    </button>
+    <Tooltip content={hint}>
+      <button
+        id={tabId(view)}
+        type="button"
+        role="tab"
+        aria-selected={selected}
+        aria-controls={PANEL_ID}
+        tabIndex={selected ? 0 : -1}
+        onClick={onSelect}
+        className={`-mb-px flex h-9 items-center gap-2 border-b-2 px-3 text-sm transition-colors ${tone}`}
+      >
+        <Icon aria-hidden className="size-4" />
+        {label}
+      </button>
+    </Tooltip>
   );
 }
 

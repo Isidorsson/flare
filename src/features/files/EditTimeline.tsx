@@ -2,6 +2,7 @@ import { FilePen, FilePlus, FileDiff, type LucideIcon } from "lucide-react";
 import { useMemo } from "react";
 
 import { EmptyState } from "@/shared/ui/EmptyState";
+import { Tooltip } from "@/shared/ui/Tooltip";
 
 import type { AgentChangeKind, TimelineEntry } from "./files-types";
 import { relativeTo } from "./paths";
@@ -24,21 +25,22 @@ function EntryButton({ entry, root, selected, onSelect }: EntryButtonProps) {
   const { icon: Icon, label, tone } = KIND_VIEW[entry.kind];
   const shownPath = root === null ? entry.path : relativeTo(root, entry.path);
   return (
-    <button
-      type="button"
-      aria-current={selected}
-      title={entry.path}
-      onClick={() => {
-        onSelect(entry.id);
-      }}
-      className={`flex h-7 w-full items-center gap-2 px-3 text-left text-xs transition-colors hover:bg-surface-2 ${
-        selected ? "bg-surface-3 text-fg" : "text-fg-muted"
-      }`}
-    >
-      <Icon aria-hidden className={`size-3.5 shrink-0 ${tone}`} />
-      <span className="min-w-0 flex-1 truncate">{shownPath}</span>
-      <span className="shrink-0 text-[10px] text-fg-subtle">{label}</span>
-    </button>
+    <Tooltip content="Show this edit as a diff" detail={entry.path}>
+      <button
+        type="button"
+        aria-current={selected}
+        onClick={() => {
+          onSelect(entry.id);
+        }}
+        className={`flex h-7 w-full items-center gap-2 px-3 text-left text-xs transition-colors hover:bg-surface-2 ${
+          selected ? "bg-surface-3 text-fg" : "text-fg-muted"
+        }`}
+      >
+        <Icon aria-hidden className={`size-3.5 shrink-0 ${tone}`} />
+        <span className="min-w-0 flex-1 truncate">{shownPath}</span>
+        <span className="shrink-0 text-[10px] text-fg-subtle">{label}</span>
+      </button>
+    </Tooltip>
   );
 }
 

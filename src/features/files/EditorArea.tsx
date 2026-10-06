@@ -1,7 +1,9 @@
 import { FileDiff, Save } from "lucide-react";
 import { Suspense, lazy, useMemo, type ReactNode } from "react";
 
+import { SHORTCUTS } from "@/shared/lib/shortcuts";
 import { IconButton } from "@/shared/ui/IconButton";
+import { Tooltip } from "@/shared/ui/Tooltip";
 
 import { ConflictBanner } from "./ConflictBanner";
 import { EditorTabs } from "./EditorTabs";
@@ -27,6 +29,11 @@ function EditorFallback() {
   return <PaneMessage>Loading editor...</PaneMessage>;
 }
 
+function saveBlockedReason(file: OpenFile, dirty: boolean): string | undefined {
+  if (file.saving) return "Saving in progress";
+  return dirty || file.conflict !== null ? undefined : "Nothing to save";
+}
+
 function FileHeader({ file, root }: { file: OpenFile; root: string | null }) {
   const saveFile = useFiles((state) => state.saveFile);
   const showChange = useFiles((state) => state.showChange);
@@ -34,9 +41,9 @@ function FileHeader({ file, root }: { file: OpenFile; root: string | null }) {
   const dirty = isDirty(file);
   return (
     <div className="flex h-8 shrink-0 items-center gap-2 border-b border-border px-3 text-xs">
-      <span className="min-w-0 flex-1 truncate text-fg-muted" title={file.path}>
-        {root === null ? file.path : relativeTo(root, file.path)}
-      </span>
+      <Tooltip content={file.path}>
+        <span className="min-w-0 flex-1 truncate text-fg-muted">{root === null ? file.path : relativeTo(root, file.path)}</span>
+      </Tooltip>
       {file.error === null ? null : <span className="shrink-0 text-danger">{file.error}</span>}
       {latestChangeId === undefined ? null : (
         <IconButton
@@ -49,8 +56,9 @@ function FileHeader({ file, root }: { file: OpenFile; root: string | null }) {
       )}
       <IconButton
         icon={Save}
-        label={file.saving ? "Saving..." : "Save (Ctrl+S)"}
-        disabled={file.saving || (!dirty && file.conflict === null)}
+        label="Save file"
+        shortcut={SHORTCUTS.save}
+        disabledReason={saveBlockedReason(file, dirty)}
         onClick={() => {
           void saveFile(file.path);
         }}
@@ -86,18 +94,20 @@ function DiffHeader({ entry, label }: { entry: TimelineEntry; label: string }) {
   return (
     <div className="flex h-8 shrink-0 items-center gap-2 border-b border-border px-3 text-xs">
       <span className="shrink-0 rounded bg-accent-soft px-1.5 text-[10px] leading-4 text-accent">{label}</span>
-      <span className="min-w-0 flex-1 truncate text-fg-muted" title={entry.path}>
-        {root === null ? entry.path : relativeTo(root, entry.path)}
-      </span>
-      <button
-        type="button"
-        onClick={() => {
-          void openFile(entry.path);
-        }}
-        className="shrink-0 text-fg-muted underline-offset-2 hover:text-fg hover:underline"
-      >
-        Open file
-      </button>
+      <Tooltip content={entry.path}>
+        <span className="min-w-0 flex-1 truncate text-fg-muted">{root === null ? entry.path : relativeTo(root, entry.path)}</span>
+      </Tooltip>
+      <Tooltip content="Open this file to edit it">
+        <button
+          type="button"
+          onClick={() => {
+            void openFile(entry.path);
+          }}
+          className="shrink-0 text-fg-muted underline-offset-2 hover:text-fg hover:underline"
+        >
+          Open file
+        </button>
+      </Tooltip>
     </div>
   );
 }

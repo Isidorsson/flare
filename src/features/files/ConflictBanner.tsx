@@ -1,6 +1,8 @@
 import { TriangleAlert } from "lucide-react";
 import type { ComponentProps } from "react";
 
+import { Tooltip } from "@/shared/ui/Tooltip";
+
 import type { DiskConflict } from "./files-types";
 import { useFiles } from "./use-files";
 
@@ -27,29 +29,35 @@ export function ConflictBanner({ path, conflict }: { path: string; conflict: Dis
         {modified ? "This file changed on disk while you were editing it." : "This file was deleted on disk."}
       </p>
       {modified ? (
-        <BannerButton
-          onClick={() => {
-            void reloadFile(path);
-          }}
-        >
-          Reload from disk
-        </BannerButton>
+        <Tooltip content="Discard your edits and load the version on disk">
+          <BannerButton
+            onClick={() => {
+              void reloadFile(path);
+            }}
+          >
+            Reload from disk
+          </BannerButton>
+        </Tooltip>
       ) : (
+        <Tooltip content="Close this tab; the file no longer exists">
+          <BannerButton
+            onClick={() => {
+              closeFile(path);
+            }}
+          >
+            Close
+          </BannerButton>
+        </Tooltip>
+      )}
+      <Tooltip content={modified ? "Save your version over the one on disk" : "Write your version back to disk"}>
         <BannerButton
           onClick={() => {
-            closeFile(path);
+            void saveFile(path);
           }}
         >
-          Close
+          {modified ? "Overwrite" : "Recreate"}
         </BannerButton>
-      )}
-      <BannerButton
-        onClick={() => {
-          void saveFile(path);
-        }}
-      >
-        {modified ? "Overwrite" : "Recreate"}
-      </BannerButton>
+      </Tooltip>
     </div>
   );
 }

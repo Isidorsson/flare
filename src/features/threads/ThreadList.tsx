@@ -4,6 +4,7 @@ import { threadTitle, type Thread } from "@/features/agent/thread-types";
 import { useAgent } from "@/features/agent/use-agent";
 import { baseName } from "@/shared/lib/path-name";
 import { EmptyState } from "@/shared/ui/EmptyState";
+import { Tooltip } from "@/shared/ui/Tooltip";
 
 interface ThreadRowProps {
   thread: Thread;
@@ -15,26 +16,26 @@ function ThreadRow({ thread, active, onSelect }: ThreadRowProps) {
   const running = thread.status === "running";
   return (
     <li>
-      <button
-        type="button"
-        aria-current={active ? "true" : undefined}
-        onClick={() => {
-          onSelect(thread.id);
-        }}
-        className={`flex w-full flex-col gap-0.5 rounded-md px-2 py-1.5 text-left transition-colors ${
-          active ? "bg-surface-3 text-fg" : "text-fg-muted hover:bg-surface-2 hover:text-fg"
-        }`}
-      >
-        <span className="flex items-center gap-2">
-          <span className="min-w-0 flex-1 truncate text-sm">{threadTitle(thread)}</span>
-          {running && (
-            <span role="img" aria-label="Running" className="size-1.5 shrink-0 animate-pulse rounded-full bg-accent" />
-          )}
-        </span>
-        <span title={thread.cwd} className="truncate text-xs text-fg-subtle">
-          {baseName(thread.cwd)}
-        </span>
-      </button>
+      <Tooltip content="Open this thread" detail={`${threadTitle(thread)}\n${thread.cwd}`} side="right">
+        <button
+          type="button"
+          aria-current={active ? "true" : undefined}
+          onClick={() => {
+            onSelect(thread.id);
+          }}
+          className={`flex w-full flex-col gap-0.5 rounded-md px-2 py-1.5 text-left transition-colors ${
+            active ? "bg-surface-3 text-fg" : "text-fg-muted hover:bg-surface-2 hover:text-fg"
+          }`}
+        >
+          <span className="flex items-center gap-2">
+            <span className="min-w-0 flex-1 truncate text-sm">{threadTitle(thread)}</span>
+            {running && (
+              <span role="img" aria-label="Running" className="size-1.5 shrink-0 animate-pulse rounded-full bg-accent" />
+            )}
+          </span>
+          <span className="truncate text-xs text-fg-subtle">{baseName(thread.cwd)}</span>
+        </button>
+      </Tooltip>
     </li>
   );
 }

@@ -1,13 +1,20 @@
 import { PERMISSION_MODES, outputStyleSchema, permissionModeSchema } from "@flare/protocol";
 
-import { PERMISSION_MODE_LABELS, mergeOutputStyles, outputStyleLabel } from "@/features/agent/session-settings";
+import {
+  PERMISSION_MODE_DESCRIPTIONS,
+  PERMISSION_MODE_LABELS,
+  mergeOutputStyles,
+  outputStyleLabel,
+} from "@/features/agent/session-settings";
 import { useAgent } from "@/features/agent/use-agent";
+import { Tooltip } from "@/shared/ui/Tooltip";
 
 import { ModelEffortMenu } from "./ModelEffortMenu";
 
 interface PickerProps<T extends string> {
   label: string;
-  title?: string;
+  hint: string;
+  detail: string;
   value: T;
   options: readonly T[];
   labelOf: (option: T) => string;
@@ -15,23 +22,25 @@ interface PickerProps<T extends string> {
   onChange: (value: T) => void;
 }
 
-function Picker<T extends string>({ label, title, value, options, labelOf, parse, onChange }: PickerProps<T>) {
+function Picker<T extends string>({ label, hint, detail, value, options, labelOf, parse, onChange }: PickerProps<T>) {
   return (
-    <label title={title} className="flex items-center gap-1.5 text-[11px] text-fg-subtle">
+    <label className="flex items-center gap-1.5 text-[11px] text-fg-subtle">
       <span>{label}</span>
-      <select
-        value={value}
-        onChange={(event) => {
-          onChange(parse(event.target.value));
-        }}
-        className="h-6 rounded-md border border-border bg-surface-2 px-1.5 text-xs text-fg outline-none hover:border-border-strong focus-visible:border-accent"
-      >
-        {options.map((option) => (
-          <option key={option} value={option}>
-            {labelOf(option)}
-          </option>
-        ))}
-      </select>
+      <Tooltip content={hint} detail={detail} side="top">
+        <select
+          value={value}
+          onChange={(event) => {
+            onChange(parse(event.target.value));
+          }}
+          className="h-6 rounded-md border border-border bg-surface-2 px-1.5 text-xs text-fg outline-none hover:border-border-strong focus-visible:border-accent"
+        >
+          {options.map((option) => (
+            <option key={option} value={option}>
+              {labelOf(option)}
+            </option>
+          ))}
+        </select>
+      </Tooltip>
     </label>
   );
 }
@@ -46,6 +55,8 @@ export function SessionPicker() {
       <ModelEffortMenu model={settings.model} effort={settings.effort} onChange={changeSettings} />
       <Picker
         label="Permissions"
+        hint="Choose how Claude asks for permission"
+        detail={PERMISSION_MODE_DESCRIPTIONS[settings.permissionMode]}
         value={settings.permissionMode}
         options={PERMISSION_MODES}
         labelOf={(mode) => PERMISSION_MODE_LABELS[mode]}
@@ -56,7 +67,8 @@ export function SessionPicker() {
       />
       <Picker
         label="Style"
-        title="Applies from the next session"
+        hint="Choose Claude's output style"
+        detail="Applies from the next session"
         value={settings.outputStyle}
         options={mergeOutputStyles(outputStyles, [settings.outputStyle])}
         labelOf={outputStyleLabel}

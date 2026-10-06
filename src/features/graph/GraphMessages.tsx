@@ -2,6 +2,7 @@ import { FileX, LoaderCircle, TriangleAlert } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { EmptyState } from "@/shared/ui/EmptyState";
+import { Tooltip } from "@/shared/ui/Tooltip";
 
 import { graphStore, useGraph } from "./use-graph";
 
@@ -29,15 +30,17 @@ function FailureMessage({ message }: { message: string }) {
         </span>
         <p className="text-sm font-medium text-fg">Couldn't build the graph</p>
         <p className="text-xs break-words text-fg-muted">{message}</p>
-        <button
-          type="button"
-          onClick={() => {
-            void graphStore.getState().reindex();
-          }}
-          className="rounded-md border border-border-strong bg-surface-2 px-3 py-1 text-xs text-fg transition-colors hover:bg-surface-3"
-        >
-          Try again
-        </button>
+        <Tooltip content="Reindex the project and build the graph again">
+          <button
+            type="button"
+            onClick={() => {
+              void graphStore.getState().reindex();
+            }}
+            className="rounded-md border border-border-strong bg-surface-2 px-3 py-1 text-xs text-fg transition-colors hover:bg-surface-3"
+          >
+            Try again
+          </button>
+        </Tooltip>
       </div>
     </Centered>
   );

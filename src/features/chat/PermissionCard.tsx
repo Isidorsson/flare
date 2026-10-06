@@ -2,6 +2,7 @@ import type { PermissionDecision } from "@flare/protocol";
 import { ShieldCheck, ShieldQuestion, ShieldX } from "lucide-react";
 
 import type { PermissionItem, PermissionStatus } from "@/features/agent/thread-types";
+import { Tooltip } from "@/shared/ui/Tooltip";
 
 import { ChatButton } from "./ChatButton";
 import { formatToolInput, primaryInputText } from "./tool-preview";
@@ -37,29 +38,35 @@ function Decision({ status }: { status: ResolvedStatus }) {
 function Actions({ requestId, onRespond }: { requestId: string; onRespond: Respond }) {
   return (
     <div className="flex flex-wrap gap-2">
-      <ChatButton
-        variant="primary"
-        onClick={() => {
-          onRespond(requestId, "allow");
-        }}
-      >
-        Allow
-      </ChatButton>
-      <ChatButton
-        onClick={() => {
-          onRespond(requestId, "allowSession");
-        }}
-      >
-        Allow for session
-      </ChatButton>
-      <ChatButton
-        variant="danger"
-        onClick={() => {
-          onRespond(requestId, "deny");
-        }}
-      >
-        Deny
-      </ChatButton>
+      <Tooltip content="Let Claude use this tool this once">
+        <ChatButton
+          variant="primary"
+          onClick={() => {
+            onRespond(requestId, "allow");
+          }}
+        >
+          Allow
+        </ChatButton>
+      </Tooltip>
+      <Tooltip content="Stop asking about this tool until the session ends">
+        <ChatButton
+          onClick={() => {
+            onRespond(requestId, "allowSession");
+          }}
+        >
+          Allow for session
+        </ChatButton>
+      </Tooltip>
+      <Tooltip content="Refuse this tool call">
+        <ChatButton
+          variant="danger"
+          onClick={() => {
+            onRespond(requestId, "deny");
+          }}
+        >
+          Deny
+        </ChatButton>
+      </Tooltip>
     </div>
   );
 }

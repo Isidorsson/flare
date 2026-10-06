@@ -1,0 +1,93 @@
+/*
+ * The shared tooltip: a manual popover that Tooltip.tsx shows and hides, placed against its trigger
+ * with CSS anchor positioning. It flips to the other side, or slides along the trigger, when it would
+ * leave the window. Colours come from the design tokens.
+ */
+
+.flare-tooltip {
+  inset: auto;
+  width: max-content;
+  max-width: 18rem;
+  height: fit-content;
+  margin: 6px;
+  padding: 4px 8px;
+  overflow: visible;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-3);
+  color: var(--color-fg);
+  font-size: 11px;
+  line-height: 1.4;
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--color-bg) 70%, transparent);
+  pointer-events: none;
+  user-select: none;
+}
+
+.flare-tooltip[data-side="top"] {
+  position-area: top;
+  position-try-fallbacks: flip-block, top span-left, top span-right, bottom span-left, bottom span-right;
+}
+
+.flare-tooltip[data-side="bottom"] {
+  position-area: bottom;
+  position-try-fallbacks: flip-block, bottom span-left, bottom span-right, top span-left, top span-right;
+}
+
+.flare-tooltip[data-side="left"] {
+  position-area: left;
+  position-try-fallbacks: flip-inline, top, bottom;
+}
+
+.flare-tooltip[data-side="right"] {
+  position-area: right;
+  position-try-fallbacks: flip-inline, top, bottom;
+}
+
+.flare-tooltip:popover-open {
+  opacity: 1;
+  transition: opacity var(--default-transition-duration) var(--default-transition-timing-function);
+}
+
+@starting-style {
+  .flare-tooltip:popover-open {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flare-tooltip:popover-open {
+    transition: none;
+  }
+}
+
+.flare-tooltip-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.flare-tooltip-label {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.flare-tooltip-kbd {
+  flex-shrink: 0;
+  padding: 0 4px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-2);
+  color: var(--color-fg-muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 14px;
+}
+
+.flare-tooltip-detail {
+  display: block;
+  margin-top: 2px;
+  color: var(--color-fg-muted);
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}

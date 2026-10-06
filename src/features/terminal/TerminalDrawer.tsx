@@ -1,10 +1,12 @@
 import { ChevronDown, ChevronUp, OctagonX, Plus, SquareTerminal } from "lucide-react";
 
 import { TERMINAL_HEADER_HEIGHT } from "@/features/shell/layout-constants";
+import { useWorkspace } from "@/features/workspace/use-workspace";
 import type { SizeBounds } from "@/shared/lib/splitter-math";
 import { EmptyState } from "@/shared/ui/EmptyState";
 import { IconButton } from "@/shared/ui/IconButton";
 import { Splitter } from "@/shared/ui/Splitter";
+import { Tooltip } from "@/shared/ui/Tooltip";
 
 import { TerminalTabs } from "./TerminalTabs";
 import { TerminalView } from "./TerminalView";
@@ -37,16 +39,22 @@ export function TerminalDrawer({ open, height, bounds, onToggle, onResize }: Ter
         <Splitter edge="top" label="Resize terminal" value={height} bounds={bounds} onResize={onResize} />
       )}
       <div style={{ height: TERMINAL_HEADER_HEIGHT }} className="flex items-center gap-1 pr-1.5 pl-1">
-        <button
-          type="button"
-          aria-expanded={open}
-          aria-controls={BODY_ID}
-          onClick={handleToggle}
-          className="flex h-7 shrink-0 items-center gap-2 rounded-md px-2 text-xs font-medium text-fg-muted transition-colors hover:bg-surface-2 hover:text-fg"
+        <Tooltip
+          content={open ? "Collapse the terminal" : "Open the terminal"}
+          detail={!open && tabs.length === 0 ? "Starts a new shell" : undefined}
+          side="top"
         >
-          <SquareTerminal aria-hidden className="size-4" />
-          Terminal
-        </button>
+          <button
+            type="button"
+            aria-expanded={open}
+            aria-controls={BODY_ID}
+            onClick={handleToggle}
+            className="flex h-7 shrink-0 items-center gap-2 rounded-md px-2 text-xs font-medium text-fg-muted transition-colors hover:bg-surface-2 hover:text-fg"
+          >
+            <SquareTerminal aria-hidden className="size-4" />
+            Terminal
+          </button>
+        </Tooltip>
         {open && (
           <TerminalTabs
             tabs={tabs}
@@ -56,7 +64,7 @@ export function TerminalDrawer({ open, height, bounds, onToggle, onResize }: Ter
             onRename={renameTab}
           />
         )}
-        {open && <IconButton icon={Plus} label="New terminal" onClick={terminalController.openTab} />}
+        {open && <IconButton icon={Plus} label="Open a new terminal" side="top" onClick={terminalController.openTab} />}
         <span className="flex-1" />
         <DrawerActions open={open} hasTabs={tabs.length > 0} onToggle={handleToggle} />
       </div>
@@ -88,12 +96,14 @@ function DrawerActions({ open, hasTabs, onToggle }: DrawerActionsProps) {
       <IconButton
         icon={OctagonX}
         label="Close all terminals"
-        disabled={!hasTabs}
+        side="top"
+        disabledReason={hasTabs ? undefined : "No terminals are open"}
         onClick={terminalController.closeAll}
       />
       <IconButton
         icon={open ? ChevronDown : ChevronUp}
-        label={open ? "Collapse terminal" : "Expand terminal"}
+        label={open ? "Collapse the terminal" : "Expand the terminal"}
+        side="top"
         aria-expanded={open}
         aria-controls={BODY_ID}
         onClick={onToggle}
@@ -103,6 +113,7 @@ function DrawerActions({ open, hasTabs, onToggle }: DrawerActionsProps) {
 }
 
 function NoTerminals() {
+  const root = useWorkspace((state) => state.root);
   return (
     <div className="flex h-full flex-col items-center justify-center gap-4">
       <EmptyState
@@ -110,13 +121,15 @@ function NoTerminals() {
         title="No terminal session"
         description="Shells you start for this project will run here."
       />
-      <button
-        type="button"
-        onClick={terminalController.openTab}
-        className="rounded-md border border-border bg-surface-2 px-3 py-1.5 text-xs font-medium text-fg transition-colors hover:bg-surface-3"
-      >
-        New terminal
-      </button>
+      <Tooltip content="Start a new shell" detail={root === null ? undefined : `Starts in ${root}`} side="top">
+        <button
+          type="button"
+          onClick={terminalController.openTab}
+          className="rounded-md border border-border bg-surface-2 px-3 py-1.5 text-xs font-medium text-fg transition-colors hover:bg-surface-3"
+        >
+          New terminal
+        </button>
+      </Tooltip>
     </div>
   );
 }

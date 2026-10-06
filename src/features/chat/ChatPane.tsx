@@ -4,6 +4,7 @@ import { selectActiveThread } from "@/features/agent/agent-selectors";
 import { threadTitle } from "@/features/agent/thread-types";
 import { useAgent } from "@/features/agent/use-agent";
 import { baseName } from "@/shared/lib/path-name";
+import { Tooltip } from "@/shared/ui/Tooltip";
 
 import { Composer } from "./Composer";
 import { formatCost } from "./format-cost";
@@ -17,9 +18,11 @@ function ChatHeader() {
     <header className="flex h-11 shrink-0 items-center gap-3 border-b border-border px-4">
       <h1 className="min-w-0 truncate text-sm font-medium">{threadTitle(thread)}</h1>
       {thread && (
-        <span title={thread.cwd} className="shrink-0 text-xs text-fg-subtle">
-          {baseName(thread.cwd)}
-        </span>
+        <Tooltip content="Project folder" detail={thread.cwd}>
+          <span tabIndex={0} className="shrink-0 text-xs text-fg-subtle">
+            {baseName(thread.cwd)}
+          </span>
+        </Tooltip>
       )}
       <div className="ml-auto flex shrink-0 items-center gap-3 text-xs text-fg-muted">
         {running && (
@@ -28,7 +31,11 @@ function ChatHeader() {
             Working
           </span>
         )}
-        {thread !== null && thread.costUsd > 0 && <span title="Session cost so far">{formatCost(thread.costUsd)}</span>}
+        {thread !== null && thread.costUsd > 0 && (
+          <Tooltip content="Cost of this session so far">
+            <span tabIndex={0}>{formatCost(thread.costUsd)}</span>
+          </Tooltip>
+        )}
       </div>
     </header>
   );
