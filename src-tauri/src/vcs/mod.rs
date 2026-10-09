@@ -16,7 +16,10 @@
 //! - A repository with no commits yet is a normal case everywhere, not an error.
 //! - Mutating commands return the fresh `VcsStatus` so the UI needs no second round trip.
 //!
-//! Git is driven through `crate::git_cli`, the runner shared with `checkpoints`.
+//! Pull requests go through the GitHub CLI (`gh`), which is never required: without it, or signed
+//! out, the pull request commands say so in their results and everything else keeps working.
+//!
+//! Git and `gh` are both driven through `crate::git_cli`, the runner shared with `checkpoints`.
 
 mod blobs;
 mod branches;
@@ -24,9 +27,13 @@ pub mod commands;
 mod commit;
 mod diff;
 mod error;
+mod gh;
 mod message_context;
 mod model;
 mod paths;
+mod pr_context;
+mod pr_create;
+mod pr_info;
 mod remote;
 mod repo;
 mod staging;

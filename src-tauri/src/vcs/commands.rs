@@ -3,7 +3,8 @@ use tauri::State;
 use super::error::VcsError;
 use super::model::{
     BranchRequest, CommitRequest, CommitResult, DeleteBranchRequest, FileDiff, FileDiffRequest,
-    MessageContext, PathsRequest, RootRequest, VcsBranch, VcsStatus,
+    MessageContext, PathsRequest, PrContext, PrContextRequest, PrCreateRequest, PrCreated, PrInfo,
+    RootRequest, VcsBranch, VcsStatus,
 };
 use super::state::VcsState;
 
@@ -142,4 +143,31 @@ pub async fn vcs_message_context(
 ) -> Result<MessageContext, VcsError> {
     let state = state.inner().clone();
     blocking(move || state.message_context(request)).await
+}
+
+#[tauri::command]
+pub async fn vcs_pr_info(
+    state: State<'_, VcsState>,
+    request: RootRequest,
+) -> Result<PrInfo, VcsError> {
+    let state = state.inner().clone();
+    blocking(move || state.pr_info(request)).await
+}
+
+#[tauri::command]
+pub async fn vcs_pr_context(
+    state: State<'_, VcsState>,
+    request: PrContextRequest,
+) -> Result<PrContext, VcsError> {
+    let state = state.inner().clone();
+    blocking(move || state.pr_context(request)).await
+}
+
+#[tauri::command]
+pub async fn vcs_pr_create(
+    state: State<'_, VcsState>,
+    request: PrCreateRequest,
+) -> Result<PrCreated, VcsError> {
+    let state = state.inner().clone();
+    blocking(move || state.pr_create(request)).await
 }

@@ -100,6 +100,62 @@ pub struct MessageContext {
     pub recent_bodies: Vec<String>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum PrState {
+    Open,
+    Closed,
+    Merged,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PullRequest {
+    pub number: u64,
+    pub url: String,
+    pub title: String,
+    pub state: PrState,
+    pub is_draft: bool,
+    pub base: String,
+}
+
+/// What the pull request section needs to decide what to show. A missing or signed-out `gh` is a
+/// state here, not an error.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PrInfo {
+    pub gh_available: bool,
+    pub authenticated: bool,
+    pub default_base: Option<String>,
+    /// The pull request whose head is the current branch.
+    pub current: Option<PullRequest>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PrCommit {
+    pub subject: String,
+    pub body: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PrContext {
+    pub base: String,
+    pub branch: String,
+    /// Oldest first.
+    pub commits: Vec<PrCommit>,
+    pub stat: String,
+    pub truncated: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PrCreated {
+    pub pr: PullRequest,
+    pub status: VcsStatus,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RootRequest {
@@ -141,6 +197,23 @@ pub struct DeleteBranchRequest {
     pub root: String,
     pub name: String,
     pub force: bool,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PrContextRequest {
+    pub root: String,
+    pub base: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PrCreateRequest {
+    pub root: String,
+    pub title: String,
+    pub body: String,
+    pub base: String,
+    pub draft: bool,
 }
 
 #[cfg(test)]
@@ -243,5 +316,67 @@ mod tests {
         assert!(!diff.staged);
         let missing = serde_json::from_str::<PathsRequest>(r#"{"root":"/r"}"#);
         assert!(missing.is_err(), "paths is required, even when empty");
+    }
+
+    #[test]
+    fn pull_request_shapes_use_the_contract_field_names() {
+        let pr = PullRequest {
+            number: 7,
+            url: "https://github.com/o/r/pull/7".to_owned(),
+            title: "Add login".to_owned(),
+            state: PrState::Merged,
+            is_draft: true,
+            base: "main".to_owned(),
+        };
+        let info = serde_json::to_value(PrInfo {
+            gh_available: true,
+            authenticated: false,
+            default_base: None,
+            current: Some(pr.clone()),
+        })
+        .expect("serializes");
+        assert_eq!(info["ghAvailable"], true);
+        assert_eq!(info["authenticated"], false);
+        assert!(info["defaultBase"].is_null());
+        assert_eq!(info["current"]["number"], 7);
+        assert_eq!(info["current"]["state"], "merged");
+        assert_eq!(info["current"]["isDraft"], true);
+        assert_eq!(info["current"]["base"], "main");
+
+        let context = serde_json::to_value(PrContext {
+            base: "main".to_owned(),
+            branch: "feat/login".to_owned(),
+            commits: vec![PrCommit {
+                subject: "feat: login".to_owned(),
+                body: String::new(),
+            }],
+            stat: String::new(),
+            truncated: false,
+        })
+        .expect("serializes");
+        assert_eq!(context["commits"][0]["subject"], "feat: login");
+        assert_eq!(context["commits"][0]["body"], "");
+        let created = serde_json::to_value(PrCreated {
+            pr,
+            status: VcsStatus::not_a_repo(),
+        })
+        .expect("serializes");
+        assert_eq!(created["pr"]["url"], "https://github.com/o/r/pull/7");
+        assert_eq!(created["status"]["isRepo"], false);
+    }
+
+    #[test]
+    fn pull_request_requests_deserialize_from_camel_case() {
+        let create: PrCreateRequest = serde_json::from_str(
+            r#"{"root":"/r","title":"t","body":"b","base":"main","draft":true}"#,
+        )
+        .expect("parses");
+        assert!(create.draft);
+        assert_eq!(create.base, "main");
+        let context: PrContextRequest =
+            serde_json::from_str(r#"{"root":"/r","base":"main"}"#).expect("parses");
+        assert_eq!(context.base, "main");
+        let missing = serde_json::from_str::<PrCreateRequest>(r#"{"root":"/r","title":"t"}"#);
+        assert!(missing.is_err());
     }
 }

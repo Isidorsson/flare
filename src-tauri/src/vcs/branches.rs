@@ -115,7 +115,7 @@ fn plan_switch(
     })
 }
 
-fn validate_name(repo: &Repo, name: &str) -> Result<(), VcsError> {
+pub fn validate_name(repo: &Repo, name: &str) -> Result<(), VcsError> {
     let plain = !name.is_empty() && !name.starts_with('-') && !name.contains(['\0', '\n']);
     if !plain {
         return Err(VcsError::InvalidRequest(format!(

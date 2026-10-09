@@ -7,11 +7,15 @@ use std::process::Command;
 
 use tempfile::TempDir;
 
+use crate::git_cli::Git;
 use crate::vcs::error::VcsError;
 use crate::vcs::model::{
     BranchRequest, CommitRequest, CommitResult, DeleteBranchRequest, FileDiff, FileDiffRequest,
-    MessageContext, PathsRequest, RootRequest, VcsBranch, VcsFile, VcsStatus,
+    MessageContext, PathsRequest, PrContext, PrContextRequest, PrCreateRequest, PrCreated, PrInfo,
+    RootRequest, VcsBranch, VcsFile, VcsStatus,
 };
+use crate::vcs::pr_info;
+use crate::vcs::repo::Repo;
 use crate::vcs::VcsState;
 
 /// Local settings that make test repositories independent of the machine's git configuration.
@@ -217,6 +221,38 @@ impl Fixture {
 
     pub fn message_context(&self) -> Result<MessageContext, VcsError> {
         self.state.message_context(self.root_request())
+    }
+
+    pub fn pr_context(&self, base: &str) -> Result<PrContext, VcsError> {
+        self.state.pr_context(PrContextRequest {
+            root: self.root.to_string_lossy().into_owned(),
+            base: base.to_owned(),
+        })
+    }
+
+    /// Asks as `vcs_pr_info` would, with `gh` replaced by the given stand-in.
+    pub fn pr_info(&self, gh: &Git) -> Result<PrInfo, VcsError> {
+        let repo = Repo::open(&self.root.to_string_lossy())?;
+        pr_info::read(&repo, gh)
+    }
+
+    /// Creates as `vcs_pr_create` would, with `gh` replaced by the given stand-in.
+    pub fn create_pr(&self, gh: &Git, request: &PrCreateRequest) -> Result<PrCreated, VcsError> {
+        let repo = Repo::open(&self.root.to_string_lossy())?;
+        self.state.create_pull_request(&repo, gh, request)
+    }
+
+    pub fn pr_request(&self, title: &str, base: &str) -> PrCreateRequest {
+        PrCreateRequest {
+            root: self.root.to_string_lossy().into_owned(),
+            title: title.to_owned(),
+            body: "## Summary
+- the change
+"
+            .to_owned(),
+            base: base.to_owned(),
+            draft: false,
+        }
     }
 
     /// Commits with a subject and a body paragraph, straight through git.
