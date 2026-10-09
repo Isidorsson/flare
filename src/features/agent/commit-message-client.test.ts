@@ -1,49 +1,31 @@
 import { describe, expect, test } from "bun:test";
 
-import { MAX_COMMIT_RECENT_SUBJECTS, type AppMessage, type BridgeEvent } from "@flare/protocol";
-
-import { createAgentEventBus, type AgentEventBus } from "./agent-events";
 import {
-  createCommitMessageClient,
-  type CommitMessageClientDeps,
-  type CommitMessageInput,
-} from "./commit-message-client";
+  MAX_COMMIT_RECENT_BODIES,
+  MAX_COMMIT_RECENT_SUBJECTS,
+  type BridgeEvent,
+} from "@flare/protocol";
+
+import { createAgentEventBus } from "./agent-events";
+import { createCommitMessageClient, type CommitMessageInput } from "./commit-message-client";
+import type { OneShotClientDeps } from "./one-shot-client";
+import { createOneShotTestBed, tick } from "./testing/one-shot-test-bed";
 import { rejectionOf } from "./testing/rejection-of";
 
-const input: CommitMessageInput = {
+const input = {
   stat: " src/a.ts | 2 +-",
   patch: "diff --git a/src/a.ts b/src/a.ts\n-a\n+b\n",
   truncated: false,
+  branch: "feat/login",
   recentSubjects: ["feat(chat): stream replies"],
+  recentBodies: ["Streaming made replies feel faster."],
   includeBody: true,
-};
+} satisfies CommitMessageInput;
 
-function setup(overrides: Partial<CommitMessageClientDeps> = {}) {
-  const bus: AgentEventBus = createAgentEventBus();
-  const sent: AppMessage[] = [];
-  let listeners = 0;
-  let ids = 0;
-  const generate = createCommitMessageClient({
-    send: (message) => {
-      sent.push(message);
-      return Promise.resolve();
-    },
-    subscribe: (listener) => {
-      listeners += 1;
-      const unsubscribe = bus.subscribe(listener);
-      return () => {
-        listeners -= 1;
-        unsubscribe();
-      };
-    },
-    createId: () => `req-${String((ids += 1))}`,
-    timeoutMs: 5_000,
-    ...overrides,
-  });
-  return { generate, bus, sent, listeners: () => listeners };
+function setup(overrides: Partial<OneShotClientDeps> = {}) {
+  const bed = createOneShotTestBed(overrides);
+  return { generate: createCommitMessageClient(bed.deps), bus: bed.bus, sent: bed.sent, listeners: bed.listeners };
 }
-
-const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
 function generated(requestId: string, subject: string, body: string | null = null): BridgeEvent {
   return { type: "commit.generated", requestId, subject, body };
@@ -90,6 +72,18 @@ describe("generateCommitMessage", () => {
     bus.publish({ type: "commit.failed", requestId: "someone-else", message: "not mine either" });
     bus.publish({ type: "assistant.delta", text: "hello" });
     bus.publish({ type: "error", message: "unrelated", fatal: false });
+    bus.publish(generated("req-1", "fix: mine"));
+
+    expect(await pending).toEqual({ subject: "fix: mine", body: null });
+  });
+
+  test("ignores pull request replies that carry its request id", async () => {
+    const { generate, bus } = setup();
+
+    const pending = generate(input);
+    await tick();
+    bus.publish({ type: "pr.generated", requestId: "req-1", title: "feat: not a commit", body: "" });
+    bus.publish({ type: "pr.failed", requestId: "req-1", message: "not a commit either" });
     bus.publish(generated("req-1", "fix: mine"));
 
     expect(await pending).toEqual({ subject: "fix: mine", body: null });
@@ -174,6 +168,21 @@ describe("generateCommitMessage", () => {
     );
   });
 
+  test("sends only the newest bodies the protocol allows", async () => {
+    const { generate, bus, sent } = setup();
+    const recentBodies = Array.from({ length: MAX_COMMIT_RECENT_BODIES + 4 }, (_, index) => `why ${String(index)}`);
+
+    const pending = generate({ ...input, recentBodies });
+    await tick();
+    bus.publish(generated("req-1", "fix: x"));
+    await pending;
+
+    const request = sent[0];
+    expect(request?.type === "commit.generate" ? request.recentBodies : []).toEqual(
+      recentBodies.slice(0, MAX_COMMIT_RECENT_BODIES),
+    );
+  });
+
   test("passes the truncated flag and an empty diff through", async () => {
     const { generate, bus, sent } = setup();
 
@@ -183,5 +192,34 @@ describe("generateCommitMessage", () => {
     await pending;
 
     expect(sent[0]).toMatchObject({ patch: "", truncated: true, recentSubjects: [] });
+  });
+
+  test("sends no branch and no bodies when the caller has none", async () => {
+    const { generate, bus, sent } = setup();
+    const withoutContext: CommitMessageInput = {
+      stat: input.stat,
+      patch: input.patch,
+      truncated: false,
+      recentSubjects: [],
+      includeBody: true,
+    };
+
+    const pending = generate(withoutContext);
+    await tick();
+    bus.publish(generated("req-1", "fix: x"));
+    await pending;
+
+    expect(sent[0]).toMatchObject({ branch: null, recentBodies: [] });
+  });
+
+  test("passes a detached HEAD through as no branch", async () => {
+    const { generate, bus, sent } = setup();
+
+    const pending = generate({ ...input, branch: null });
+    await tick();
+    bus.publish(generated("req-1", "fix: x"));
+    await pending;
+
+    expect(sent[0]).toMatchObject({ branch: null });
   });
 });

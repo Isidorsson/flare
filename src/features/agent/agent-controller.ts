@@ -10,6 +10,7 @@ import { describeError } from "@/shared/lib/describe-error";
 
 import type { BridgeTransport } from "./bridge-transport";
 import { mergeOutputStyles, type SessionSettings } from "./session-settings";
+import { isStandaloneEvent } from "./standalone-events";
 import { createThread, type Thread } from "./thread-types";
 import { addNotice, addUserMessage, applyBridgeEvent, markPermission, stopRunning } from "./transcript";
 
@@ -192,8 +193,7 @@ export class AgentController {
   }
 
   #ingest(event: BridgeEvent): void {
-    // Answers to standalone requests belong to no thread; their requester listens on the event bus.
-    if (event.type === "commit.generated" || event.type === "commit.failed") return;
+    if (isStandaloneEvent(event)) return;
     if (event.type === "session.outputStyles") {
       this.#store.set((state) => ({ outputStyles: mergeOutputStyles(state.outputStyles, event.available) }));
       return;

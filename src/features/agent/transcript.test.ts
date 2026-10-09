@@ -111,6 +111,8 @@ describe("standalone replies", () => {
       [
         { type: "commit.generated", requestId: "c1", subject: "fix: x", body: null },
         { type: "commit.failed", requestId: "c2", message: "nope" },
+        { type: "pr.generated", requestId: "p1", title: "fix: x", body: "## Summary\n- x" },
+        { type: "pr.failed", requestId: "p2", message: "nope" },
       ],
       thread,
     );

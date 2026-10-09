@@ -1,9 +1,10 @@
 import { query } from "@anthropic-ai/claude-agent-sdk";
-import { COMMIT_MESSAGE_BRIDGE_TIMEOUT_MS, encodeLine, type BridgeEvent } from "@flare/protocol";
+import { ONE_SHOT_BRIDGE_TIMEOUT_MS, encodeLine, type BridgeEvent } from "@flare/protocol";
 
 import { resolveClaudeExecutable } from "./claude-executable";
-import { CommitMessageGenerator } from "./commit-message";
+import { createCommitMessageGenerator } from "./commit-message";
 import { runCommandLoop } from "./commands";
+import { createPullRequestGenerator } from "./pr-message";
 import { readTextFile } from "./read-text-file";
 import { AgentSession } from "./session";
 
@@ -28,16 +29,19 @@ async function main(): Promise<void> {
     createSessionId: () => crypto.randomUUID(),
     log,
   });
-  const commitMessages = new CommitMessageGenerator({
+  const oneShotDeps = {
     createQuery: query,
     emit,
     resolveClaudeExecutable: findClaudeExecutable,
     log,
-    timeoutMs: COMMIT_MESSAGE_BRIDGE_TIMEOUT_MS,
-  });
+    timeoutMs: ONE_SHOT_BRIDGE_TIMEOUT_MS,
+  };
+  const commitMessages = createCommitMessageGenerator(oneShotDeps);
+  const pullRequests = createPullRequestGenerator(oneShotDeps);
   try {
-    await runCommandLoop(Bun.stdin.stream(), { session, commitMessages }, emit);
+    await runCommandLoop(Bun.stdin.stream(), { session, commitMessages, pullRequests }, emit);
   } finally {
+    pullRequests.close();
     commitMessages.close();
     session.close();
   }

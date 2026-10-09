@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { bridgeEventSchema } from "./bridge-events";
-import { COMMIT_SUBJECT_MAX_CHARS, MAX_EDITING_TEXT_CHARS, MAX_MATCH_LINES } from "./constants";
+import { COMMIT_SUBJECT_MAX_CHARS, MAX_EDITING_TEXT_CHARS, MAX_MATCH_LINES, PR_TITLE_MAX_CHARS } from "./constants";
 
 const usage = { inputTokens: 10, outputTokens: 20, cacheReadInputTokens: 0, cacheCreationInputTokens: 5 };
 
@@ -97,6 +97,20 @@ const validEvents: Record<string, object> = {
     body: null,
   },
   "commit.failed": { type: "commit.failed", requestId: "c1", message: "Claude returned no commit message." },
+  "pr.generated": {
+    type: "pr.generated",
+    requestId: "p1",
+    title: "feat(auth): add the login form",
+    body: "## Summary\n- Add a login form.\n\n## Why\nUsers could not sign in.",
+  },
+  "pr.generated with an empty body": { type: "pr.generated", requestId: "p1", title: "fix: x", body: "" },
+  "pr.generated with a title at the limit": {
+    type: "pr.generated",
+    requestId: "p1",
+    title: "x".repeat(PR_TITLE_MAX_CHARS),
+    body: "",
+  },
+  "pr.failed": { type: "pr.failed", requestId: "p1", message: "Claude returned no pull request title." },
 };
 
 const invalidEvents: Record<string, unknown> = {
@@ -195,6 +209,20 @@ const invalidEvents: Record<string, unknown> = {
   "commit.generated with empty body": { type: "commit.generated", requestId: "c1", subject: "fix: x", body: "" },
   "commit.failed without requestId": { type: "commit.failed", message: "nope" },
   "commit.failed without message": { type: "commit.failed", requestId: "c1" },
+  "pr.generated without requestId": { type: "pr.generated", title: "fix: x", body: "" },
+  "pr.generated with empty requestId": { type: "pr.generated", requestId: "", title: "fix: x", body: "" },
+  "pr.generated without title": { type: "pr.generated", requestId: "p1", body: "" },
+  "pr.generated with empty title": { type: "pr.generated", requestId: "p1", title: "", body: "" },
+  "pr.generated with an over-long title": {
+    type: "pr.generated",
+    requestId: "p1",
+    title: "x".repeat(PR_TITLE_MAX_CHARS + 1),
+    body: "",
+  },
+  "pr.generated without body": { type: "pr.generated", requestId: "p1", title: "fix: x" },
+  "pr.generated with a null body": { type: "pr.generated", requestId: "p1", title: "fix: x", body: null },
+  "pr.failed without requestId": { type: "pr.failed", message: "nope" },
+  "pr.failed without message": { type: "pr.failed", requestId: "p1" },
 };
 
 describe("bridgeEventSchema", () => {
@@ -224,6 +252,8 @@ describe("bridgeEventSchema", () => {
         "error",
         "commit.generated",
         "commit.failed",
+        "pr.generated",
+        "pr.failed",
       ]),
     );
   });
