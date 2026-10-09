@@ -6,9 +6,10 @@ use tauri::ipc::{Channel, InvokeResponseBody};
 use tauri::State;
 
 use super::error::PtyError;
+use super::profiles::{detect_profiles, resolve_launch, Launch, Profile};
 use super::pump::{PtyEvent, Sink};
 use super::session::SpawnConfig;
-use super::shell::{default_shell, home_dir, is_executable_candidate, ShellEnv, ShellSpec};
+use super::shell::{home_dir, is_executable_candidate, ShellEnv};
 use super::state::PtyState;
 
 const MAX_ID_LEN: usize = 128;
@@ -18,17 +19,9 @@ const MAX_ID_LEN: usize = 128;
 pub struct SpawnRequest {
     pub id: String,
     pub cwd: Option<String>,
-    pub shell: Option<ShellOverride>,
+    pub launch: Launch,
     pub cols: u16,
     pub rows: u16,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ShellOverride {
-    pub program: String,
-    #[serde(default)]
-    pub args: Vec<String>,
 }
 
 #[derive(Serialize)]
@@ -92,25 +85,27 @@ pub fn resolve_cwd(
     Ok(path)
 }
 
-pub fn resolve_shell(requested: Option<&ShellOverride>, env: &ShellEnv) -> ShellSpec {
-    match requested {
-        Some(custom) => ShellSpec {
-            program: custom.program.clone().into(),
-            args: custom.args.clone(),
-        },
-        None => default_shell(env, is_executable_candidate),
-    }
-}
-
 pub fn config_from_request(request: &SpawnRequest) -> Result<SpawnConfig, PtyError> {
     validate_id(&request.id)?;
     validate_size(request.cols, request.rows)?;
     Ok(SpawnConfig {
-        shell: resolve_shell(request.shell.as_ref(), &ShellEnv::current()),
+        shell: resolve_launch(
+            &request.launch,
+            &detect_profiles(&ShellEnv::current(), is_executable_candidate),
+        )?,
         cwd: resolve_cwd(request.cwd.as_deref(), home_dir(), Path::is_dir)?,
         cols: request.cols,
         rows: request.rows,
     })
+}
+
+/// Rescanned on every call so a shell installed while Flare runs shows up.
+#[tauri::command(async)]
+pub fn pty_profiles() -> Vec<Profile> {
+    detect_profiles(&ShellEnv::current(), is_executable_candidate)
+        .into_iter()
+        .map(|entry| entry.profile)
+        .collect()
 }
 
 #[tauri::command(async)]
@@ -160,20 +155,48 @@ mod tests {
 
     #[test]
     fn parses_a_camel_case_spawn_request() {
-        let parsed =
-            request(r#"{"id":"t1","cwd":"C:/code","cols":120,"rows":30,"shell":{"program":"nu"}}"#);
+        let parsed = request(
+            r#"{"id":"t1","cwd":"C:/code","cols":120,"rows":30,"launch":{"kind":"shell","profile":"nu"}}"#,
+        );
 
         assert_eq!(parsed.id, "t1");
         assert_eq!(parsed.cwd.as_deref(), Some("C:/code"));
         assert_eq!((parsed.cols, parsed.rows), (120, 30));
-        let shell = parsed.shell.unwrap();
-        assert_eq!(shell.program, "nu");
-        assert!(shell.args.is_empty());
+        assert_eq!(
+            parsed.launch,
+            Launch::Shell {
+                profile: Some("nu".into())
+            }
+        );
+    }
+
+    #[test]
+    fn parses_a_claude_launch_with_and_without_a_session() {
+        let resumed = request(
+            r#"{"id":"t1","cwd":null,"cols":80,"rows":24,"launch":{"kind":"claude","resume":"abc"}}"#,
+        );
+        let fresh =
+            request(r#"{"id":"t1","cwd":null,"cols":80,"rows":24,"launch":{"kind":"claude"}}"#);
+
+        assert_eq!(
+            resumed.launch,
+            Launch::Claude {
+                resume: Some("abc".into())
+            }
+        );
+        assert_eq!(fresh.launch, Launch::Claude { resume: None });
+    }
+
+    #[test]
+    fn rejects_a_launch_of_an_arbitrary_program() {
+        let raw = r#"{"id":"t1","cwd":null,"cols":80,"rows":24,"launch":{"kind":"program","program":"x"}}"#;
+        assert!(serde_json::from_str::<SpawnRequest>(raw).is_err());
     }
 
     #[test]
     fn rejects_a_spawn_request_without_a_size() {
-        assert!(serde_json::from_str::<SpawnRequest>(r#"{"id":"t1","cwd":null}"#).is_err());
+        let raw = r#"{"id":"t1","cwd":null,"launch":{"kind":"shell"}}"#;
+        assert!(serde_json::from_str::<SpawnRequest>(raw).is_err());
     }
 
     #[test]
@@ -214,19 +237,6 @@ mod tests {
     #[test]
     fn cwd_fails_without_a_request_or_home() {
         assert!(resolve_cwd(None, None, |_| true).is_err());
-    }
-
-    #[test]
-    fn shell_override_wins_over_the_default() {
-        let custom = ShellOverride {
-            program: "nu.exe".into(),
-            args: vec!["--login".into()],
-        };
-
-        let spec = resolve_shell(Some(&custom), &ShellEnv::current());
-
-        assert_eq!(spec.program, std::ffi::OsString::from("nu.exe"));
-        assert_eq!(spec.args, vec!["--login".to_owned()]);
     }
 
     #[test]

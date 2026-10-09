@@ -2,12 +2,15 @@ mod coalesce;
 pub mod commands;
 mod error;
 mod host;
+mod profiles;
 mod pump;
 mod registry;
 mod session;
 mod shell;
 mod state;
 
+#[cfg(test)]
+mod profiles_tests;
 #[cfg(test)]
 mod roundtrip_tests;
 #[cfg(test)]

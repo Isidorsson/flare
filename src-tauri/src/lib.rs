@@ -40,6 +40,7 @@ pub fn run() {
             graph::commands::graph_blast_radius,
             graph::commands::graph_update_file,
             graph::commands::graph_remove_file,
+            pty::commands::pty_profiles,
             pty::commands::pty_spawn,
             pty::commands::pty_write,
             pty::commands::pty_resize,

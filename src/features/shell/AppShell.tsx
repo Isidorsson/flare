@@ -1,6 +1,6 @@
 import { ChatPane } from "@/features/chat/ChatPane";
 import { RightPanel } from "@/features/right-panel/RightPanel";
-import { TerminalDrawer } from "@/features/terminal/TerminalDrawer";
+import { TerminalDrawer } from "@/features/terminal";
 import { ThreadsSidebar } from "@/features/threads/ThreadsSidebar";
 import { useViewportHeight, useViewportWidth } from "@/shared/lib/use-viewport";
 import { Splitter } from "@/shared/ui/Splitter";

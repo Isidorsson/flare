@@ -83,7 +83,17 @@ describe("terminal controller", () => {
 
     expect(id).toBe("t1");
     expect(store.getState().tabs[0]?.status).toEqual({ kind: "starting" });
-    expect(launches[0]?.options).toEqual({ id: "t1", cwd: "C:/code/app" });
+    expect(launches[0]?.options).toEqual({ id: "t1", cwd: "C:/code/app", launch: { kind: "shell", profile: null } });
+  });
+
+  test("opens a tab with the requested launch and names it after the profile", () => {
+    const { store, controller, launches } = setup();
+    const launch = { kind: "claude", resume: "session-1" } as const;
+
+    controller.openTab({ launch, label: "Claude" });
+
+    expect(store.getState().tabs[0]?.title).toBe("Claude 1");
+    expect(launches[0]?.options.launch).toEqual(launch);
   });
 
   test("passes a null cwd through when no workspace is open", () => {

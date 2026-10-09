@@ -34,6 +34,7 @@ export interface LayoutState extends PersistedLayout {
   setRightWidth: (px: number) => void;
   setTerminalHeight: (px: number) => void;
   toggleTerminal: () => void;
+  showTerminal: () => void;
   setGraphWidth: (px: number) => void;
   setRightView: (view: RightView) => void;
 }
@@ -84,6 +85,9 @@ export function createLayoutStore(storage: StateStorage) {
         },
         toggleTerminal: () => {
           set((state) => ({ terminalOpen: !state.terminalOpen }));
+        },
+        showTerminal: () => {
+          set({ terminalOpen: true });
         },
         setGraphWidth: (px) => {
           set({ graphWidth: clampToLimits(px, PANE_LIMITS.graph) });

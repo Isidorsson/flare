@@ -8,6 +8,7 @@ import { baseName } from "@/shared/lib/path-name";
 import { Tooltip } from "@/shared/ui/Tooltip";
 
 import { Composer } from "./Composer";
+import { ContinueInClaudeButton } from "./ContinueInClaudeButton";
 import { formatCost } from "./format-cost";
 import { Transcript } from "./Transcript";
 
@@ -37,6 +38,7 @@ function ChatHeader() {
             <span tabIndex={0}>{formatCost(thread.costUsd)}</span>
           </Tooltip>
         )}
+        <ContinueInClaudeButton thread={thread} />
         <CheckpointsMenu threadId={thread?.id ?? null} items={thread?.items ?? []} />
       </div>
     </header>

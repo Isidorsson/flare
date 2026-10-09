@@ -42,9 +42,11 @@ fn typed_input_reaches_the_shell_and_exit_code_comes_back() {
 #[cfg(windows)]
 #[test]
 fn the_default_windows_shell_starts_and_reports_its_exit_code() {
-    use super::shell::{default_shell, is_executable_candidate, ShellEnv};
+    use super::profiles::{detect_profiles, resolve_launch, Launch};
+    use super::shell::{is_executable_candidate, ShellEnv};
 
-    let spec = default_shell(&ShellEnv::current(), is_executable_candidate);
+    let profiles = detect_profiles(&ShellEnv::current(), is_executable_candidate);
+    let spec = resolve_launch(&Launch::Shell { profile: None }, &profiles).expect("default shell");
     let (session, mut run) = start(spec);
 
     session.write(b"exit 5\r".to_vec()).expect("write exit");

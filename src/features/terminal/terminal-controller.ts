@@ -1,4 +1,5 @@
 import { toError } from "./errors";
+import { DEFAULT_TAB, type TabRequest, type TerminalLaunch } from "./launch-profiles";
 import { hasTab, type TerminalStore } from "./terminal-store";
 
 export interface TerminalSession {
@@ -13,6 +14,7 @@ export interface TerminalSession {
 export interface SessionOptions {
   id: string;
   cwd: string | null;
+  launch: TerminalLaunch;
 }
 
 export interface SessionEvents {
@@ -31,7 +33,7 @@ export interface ControllerDeps {
 }
 
 export interface TerminalController {
-  openTab: () => string;
+  openTab: (request?: TabRequest) => string;
   closeTab: (id: string) => void;
   closeAll: () => void;
   getSession: (id: string) => TerminalSession | undefined;
@@ -56,7 +58,7 @@ export function createTerminalController(deps: ControllerDeps): TerminalControll
   const disposeQuietly = (session: TerminalSession) =>
     reportFailure("dispose terminal session", () => session.dispose());
 
-  const start = async (id: string): Promise<void> => {
+  const start = async (id: string, launch: TerminalLaunch): Promise<void> => {
     // A shell can exit before its session is registered; the tab must never
     // report "exited" without a session to show, so that exit is applied last.
     const earlyExits: (number | null)[] = [];
@@ -68,7 +70,7 @@ export function createTerminalController(deps: ControllerDeps): TerminalControll
       },
     };
     try {
-      const session = await createSession({ id, cwd: getCwd() }, events);
+      const session = await createSession({ id, cwd: getCwd(), launch }, events);
       if (!hasTab(store.getState().tabs, id)) {
         await disposeQuietly(session);
         return;
@@ -86,10 +88,10 @@ export function createTerminalController(deps: ControllerDeps): TerminalControll
   };
 
   return {
-    openTab: () => {
+    openTab: (request = DEFAULT_TAB) => {
       const id = newId();
-      store.getState().addTab(id);
-      void start(id);
+      store.getState().addTab(id, request.label);
+      void start(id, request.launch);
       return id;
     },
 

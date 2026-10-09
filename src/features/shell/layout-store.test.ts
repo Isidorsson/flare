@@ -69,6 +69,15 @@ describe("layout store defaults and actions", () => {
     expect(store.getState().rightView).toBe("split");
   });
 
+  test("shows the terminal drawer without toggling it closed", () => {
+    const store = createLayoutStore(memoryStorage().storage);
+
+    store.getState().showTerminal();
+    store.getState().showTerminal();
+
+    expect(store.getState().terminalOpen).toBe(true);
+  });
+
   test("offers the Changes view after Files, Graph and Split", () => {
     expect(RIGHT_VIEWS).toEqual(["files", "graph", "split", "changes"]);
     const store = createLayoutStore(memoryStorage().storage);

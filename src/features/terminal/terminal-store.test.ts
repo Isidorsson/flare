@@ -28,6 +28,13 @@ describe("terminal tab store", () => {
     expect(store.getState().activeId).toBe("b");
   });
 
+  test("names a tab after the given label with the shared ordinal", () => {
+    const store = storeWithTabs("a");
+    store.getState().addTab("b", "Git Bash");
+
+    expect(store.getState().tabs.map((tab) => tab.title)).toEqual(["Terminal 1", "Git Bash 2"]);
+  });
+
   test("never reuses a title number after a tab is closed", () => {
     const store = storeWithTabs("a", "b");
     store.getState().closeTab("b");

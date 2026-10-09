@@ -19,7 +19,7 @@ export interface TerminalState {
   tabs: TerminalTab[];
   activeId: string | null;
   nextOrdinal: number;
-  addTab: (id: string) => void;
+  addTab: (id: string, label?: string) => void;
   closeTab: (id: string) => void;
   closeAllTabs: () => void;
   setActive: (id: string) => void;
@@ -62,12 +62,12 @@ export function createTerminalStore() {
     activeId: null,
     nextOrdinal: 1,
 
-    addTab: (id) => {
+    addTab: (id, label = TAB_TITLE_PREFIX) => {
       const { tabs, nextOrdinal } = get();
       if (hasTab(tabs, id)) throw new Error(`Terminal tab already exists: ${id}`);
       const tab: TerminalTab = {
         id,
-        title: `${TAB_TITLE_PREFIX} ${nextOrdinal}`,
+        title: `${label} ${nextOrdinal}`,
         status: { kind: "starting" },
       };
       set({ tabs: [...tabs, tab], activeId: id, nextOrdinal: nextOrdinal + 1 });

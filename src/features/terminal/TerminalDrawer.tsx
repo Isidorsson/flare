@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronUp, OctagonX, Plus, SquareTerminal } from "lucide-react";
+import { ChevronDown, ChevronUp, OctagonX, SquareTerminal } from "lucide-react";
 
 import { TERMINAL_HEADER_HEIGHT } from "@/features/shell/layout-constants";
 import { useWorkspace } from "@/features/workspace/use-workspace";
@@ -8,9 +8,10 @@ import { IconButton } from "@/shared/ui/IconButton";
 import { Splitter } from "@/shared/ui/Splitter";
 import { Tooltip } from "@/shared/ui/Tooltip";
 
+import { NewTerminalMenu } from "./NewTerminalMenu";
 import { TerminalTabs } from "./TerminalTabs";
 import { TerminalView } from "./TerminalView";
-import { terminalController, useTerminal } from "./use-terminal";
+import { openDefaultTerminal, selectDefaultShell, terminalController, useTerminal, useTerminalProfiles } from "./use-terminal";
 
 interface TerminalDrawerProps {
   open: boolean;
@@ -29,7 +30,7 @@ export function TerminalDrawer({ open, height, bounds, onToggle, onResize }: Ter
   const renameTab = useTerminal((state) => state.renameTab);
 
   const handleToggle = () => {
-    if (!open && tabs.length === 0) terminalController.openTab();
+    if (!open && tabs.length === 0) openDefaultTerminal();
     onToggle();
   };
 
@@ -64,7 +65,7 @@ export function TerminalDrawer({ open, height, bounds, onToggle, onResize }: Ter
             onRename={renameTab}
           />
         )}
-        {open && <IconButton icon={Plus} label="Open a new terminal" side="top" onClick={terminalController.openTab} />}
+        {open && <NewTerminalMenu />}
         <span className="flex-1" />
         <DrawerActions open={open} hasTabs={tabs.length > 0} onToggle={handleToggle} />
       </div>
@@ -114,6 +115,7 @@ function DrawerActions({ open, hasTabs, onToggle }: DrawerActionsProps) {
 
 function NoTerminals() {
   const root = useWorkspace((state) => state.root);
+  const defaultShell = useTerminalProfiles(selectDefaultShell);
   return (
     <div className="flex h-full flex-col items-center justify-center gap-4">
       <EmptyState
@@ -121,10 +123,14 @@ function NoTerminals() {
         title="No terminal session"
         description="Shells you start for this project will run here."
       />
-      <Tooltip content="Start a new shell" detail={root === null ? undefined : `Starts in ${root}`} side="top">
+      <Tooltip
+        content={defaultShell === null ? "Start a new shell" : `Start ${defaultShell.label}`}
+        detail={root === null ? undefined : `Starts in ${root}`}
+        side="top"
+      >
         <button
           type="button"
-          onClick={terminalController.openTab}
+          onClick={openDefaultTerminal}
           className="rounded-md border border-border bg-surface-2 px-3 py-1.5 text-xs font-medium text-fg transition-colors hover:bg-surface-3"
         >
           New terminal
