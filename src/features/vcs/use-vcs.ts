@@ -8,7 +8,7 @@ import { tauriVcsGateway } from "./vcs-gateway";
 import { startVcsRuntime } from "./vcs-runtime";
 import { changedFileCount } from "./vcs-selectors";
 import { createVcsStore, type VcsState } from "./vcs-store";
-import type { CommitMessageGenerator } from "./vcs-types";
+import type { CommitMessageGenerator, PullRequestGenerator } from "./vcs-types";
 
 export const vcsStore = createVcsStore({ gateway: tauriVcsGateway });
 
@@ -48,17 +48,23 @@ export function useChangedFileCount(): number {
   return useVcs(changedFileCount);
 }
 
-/** Reads the git status again, e.g. when the Changes tab opens: the file watcher never sees `.git`. */
+/**
+ * Reads the git status and the pull request state again, e.g. when the Changes tab opens: the file
+ * watcher never sees `.git`, and the pull request state lives on GitHub.
+ */
 export function refreshVcs(): Promise<void> {
-  return vcsStore.getState().refresh();
+  return vcsStore.getState().reload();
 }
 
 export interface VcsConfig {
   /** Writes a commit message for a diff; until it is given, the Generate button explains it is unavailable. */
   generateMessage: CommitMessageGenerator;
+  /** Writes a pull request title and description from a branch's commits; until it is given, that Generate button explains it is unavailable. */
+  generatePullRequest?: PullRequestGenerator;
 }
 
 /** The one place the Changes tab is wired to the rest of the app. Call it once at startup. */
 export function configureVcs(config: VcsConfig): void {
   vcsStore.getState().configure(config.generateMessage);
+  if (config.generatePullRequest !== undefined) vcsStore.getState().configurePullRequest(config.generatePullRequest);
 }

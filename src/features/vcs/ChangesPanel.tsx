@@ -9,6 +9,7 @@ import { CommitBox } from "./CommitBox";
 import { DiffPane } from "./DiffPane";
 import { FileSections } from "./FileSections";
 import { InlineError } from "./InlineError";
+import { PullRequestSection } from "./PullRequestSection";
 import { useVcs } from "./use-vcs";
 import type { VcsStatus } from "./vcs-schemas";
 
@@ -26,6 +27,7 @@ function RepoView({ status }: { status: VcsStatus }) {
             <FileSections status={status} />
           </div>
           <CommitBox />
+          <PullRequestSection />
         </div>
         <DiffPane />
       </div>

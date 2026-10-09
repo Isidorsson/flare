@@ -1,11 +1,16 @@
-import type { Change, FileDiff, VcsBranch, VcsStatus } from "./vcs-schemas";
+import type { PrDraft, PrInfoState } from "./pr-types";
+import type { Change, FileDiff, PrCommit, VcsBranch, VcsStatus } from "./vcs-schemas";
 
-/** What the commit message generator is given: the diff to describe and a style hint. */
+/** What the commit message generator is given: the diff to describe and style hints. */
 export interface CommitMessageInput {
   stat: string;
   patch: string;
   truncated: boolean;
   recentSubjects: string[];
+  /** Bodies of the latest commits that have one, the style to follow for a description. */
+  recentBodies: string[];
+  /** The current branch, a hint for the type and scope; null while HEAD is detached. */
+  branch: string | null;
   includeBody: boolean;
 }
 
@@ -16,6 +21,23 @@ export interface GeneratedMessage {
 
 /** Injected from outside so this feature never depends on the agent bridge: see `configureVcs`. */
 export type CommitMessageGenerator = (input: CommitMessageInput) => Promise<GeneratedMessage>;
+
+/** What the pull request generator is given: the commits to summarise and how far the diff reaches. */
+export interface PullRequestInput {
+  branch: string;
+  base: string;
+  /** Oldest first. */
+  commits: PrCommit[];
+  stat: string;
+  truncated: boolean;
+}
+
+export interface GeneratedPullRequest {
+  title: string;
+  body: string;
+}
+
+export type PullRequestGenerator = (input: PullRequestInput) => Promise<GeneratedPullRequest>;
 
 /** Actions that change the repository. One runs at a time, so two never fight over git's index lock. */
 export type MutatingAction =
@@ -29,10 +51,11 @@ export type MutatingAction =
   | "push"
   | "switchBranch"
   | "createBranch"
-  | "deleteBranch";
+  | "deleteBranch"
+  | "createPr";
 
 /** Every action that can fail and show an error: the mutating ones and the ones that only read. */
-export type VcsAction = MutatingAction | "refresh" | "branches" | "generate";
+export type VcsAction = MutatingAction | "refresh" | "branches" | "generate" | "loadPr" | "generatePr";
 
 export interface CommitDraft {
   subject: string;
@@ -60,6 +83,11 @@ export type DiffState =
   | { kind: "ready"; diff: FileDiff; revision: number }
   | { kind: "error"; message: string };
 
+export interface StoreAccess {
+  get(): VcsSnapshot;
+  set(update: (state: VcsSnapshot) => Partial<VcsSnapshot>): void;
+}
+
 export interface VcsSnapshot {
   root: string | null;
   /** Null until the first answer for the current root. */
@@ -73,5 +101,12 @@ export interface VcsSnapshot {
   busy: MutatingAction | null;
   generating: boolean;
   canGenerate: boolean;
+  pr: PrInfoState;
+  /** Pull request drafts by workspace root and branch; they last until the app closes. */
+  prDrafts: Record<string, PrDraft>;
+  /** Whether the Pull request section is open; it stays as it was when the folder or the tab changes. */
+  prExpanded: boolean;
+  generatingPr: boolean;
+  canGeneratePr: boolean;
   errors: Partial<Record<VcsAction, string>>;
 }

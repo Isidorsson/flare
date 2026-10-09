@@ -20,6 +20,9 @@ const FAILURES: Record<VcsAction, string> = {
   createBranch: "Could not create the branch",
   deleteBranch: "Could not delete the branch",
   generate: "Could not generate a message",
+  loadPr: "Could not read the pull request state",
+  generatePr: "Could not write the pull request",
+  createPr: "Could not create the pull request",
 };
 
 function ErrorBanner({ action, message }: { action: VcsAction; message: string }) {

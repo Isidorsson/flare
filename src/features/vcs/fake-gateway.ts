@@ -1,9 +1,11 @@
+import { DEFAULT_PR_INFO, modelPrGateway, recordPrCalls, type PrFakeOptions } from "./fake-pr-gateway";
 import type { VcsGateway } from "./vcs-gateway";
 import {
   VcsCommandError,
   type Change,
   type FileDiff,
   type MessageContext,
+  type PrInfo,
   type VcsBranch,
   type VcsFile,
   type VcsStatus,
@@ -69,26 +71,32 @@ export const DEFAULT_CONTEXT: MessageContext = {
   patch: "diff --git a/src/a.ts b/src/a.ts\n-old\n+new",
   truncated: false,
   recentSubjects: ["feat(files): open diffs"],
+  branch: "main",
+  recentBodies: ["Reviewing a change needs the two versions side by side."],
 };
 
 export interface FakeRepo {
   status: VcsStatus;
   branches: VcsBranch[];
+  pr: PrInfo;
 }
 
 export interface FakeGateway {
   gateway: VcsGateway;
-  /** One line per call, in order, e.g. "stage src/a.ts" or "switch dev". */
+  /** One line per git call, in order, e.g. "stage src/a.ts" or "switch dev". */
   calls: string[];
+  /** One line per `gh` call (pull request commands), in order, e.g. "prInfo". */
+  ghCalls: string[];
   /** The repository the fake models; changes as the gateway is used. */
   repo: FakeRepo;
 }
 
-export interface FakeOptions {
+export interface FakeOptions extends PrFakeOptions {
   status?: VcsStatus;
   branches?: VcsBranch[];
   diffs?: Record<string, FileDiff>;
   context?: MessageContext;
+  prInfo?: PrInfo;
   overrides?: Partial<VcsGateway>;
 }
 
@@ -130,7 +138,9 @@ function switchedTo(branches: VcsBranch[], name: string): VcsBranch[] {
   return branches.map((branch) => ({ ...branch, current: !branch.remote && branch.name === name }));
 }
 
-function modelGateway(repo: FakeRepo, options: FakeOptions): VcsGateway {
+type GitGateway = Omit<VcsGateway, "prInfo" | "prContext" | "prCreate">;
+
+function modelGateway(repo: FakeRepo, options: FakeOptions): GitGateway {
   const mutate = (update: (status: VcsStatus) => VcsStatus): Promise<VcsStatus> => {
     repo.status = update(repo.status);
     return Promise.resolve(repo.status);
@@ -182,7 +192,7 @@ function listed(paths: string[]): string {
   return paths.length === 0 ? "(all)" : paths.join(",");
 }
 
-function recordCalls(calls: string[], pick: <K extends keyof VcsGateway>(name: K) => VcsGateway[K]): VcsGateway {
+function recordGitCalls(calls: string[], pick: <K extends keyof VcsGateway>(name: K) => VcsGateway[K]): GitGateway {
   return {
     status: (request) => {
       calls.push("status");
@@ -249,9 +259,14 @@ function recordCalls(calls: string[], pick: <K extends keyof VcsGateway>(name: K
  */
 export function createFakeGateway(options: FakeOptions = {}): FakeGateway {
   const calls: string[] = [];
-  const repo: FakeRepo = { status: options.status ?? repoStatus(), branches: options.branches ?? DEFAULT_BRANCHES };
-  const model = modelGateway(repo, options);
+  const ghCalls: string[] = [];
+  const repo: FakeRepo = {
+    status: options.status ?? repoStatus(),
+    branches: options.branches ?? DEFAULT_BRANCHES,
+    pr: options.prInfo ?? DEFAULT_PR_INFO,
+  };
+  const model: VcsGateway = { ...modelGateway(repo, options), ...modelPrGateway(repo, options) };
   const overrides = options.overrides ?? {};
   const pick = <K extends keyof VcsGateway>(name: K): VcsGateway[K] => overrides[name] ?? model[name];
-  return { gateway: recordCalls(calls, pick), calls, repo };
+  return { gateway: { ...recordGitCalls(calls, pick), ...recordPrCalls(ghCalls, pick) }, calls, ghCalls, repo };
 }
