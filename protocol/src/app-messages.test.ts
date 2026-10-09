@@ -1,7 +1,12 @@
 import { describe, expect, test } from "bun:test";
 
 import { appMessageSchema, type AppMessageOf } from "./app-messages";
-import { BUILT_IN_OUTPUT_STYLES, MAX_COMMIT_RECENT_SUBJECTS, PERMISSION_MODES } from "./constants";
+import {
+  BUILT_IN_OUTPUT_STYLES,
+  MAX_COMMIT_RECENT_BODIES,
+  MAX_COMMIT_RECENT_SUBJECTS,
+  PERMISSION_MODES,
+} from "./constants";
 
 const commitGenerate: AppMessageOf<"commit.generate"> = {
   type: "commit.generate",
@@ -9,8 +14,20 @@ const commitGenerate: AppMessageOf<"commit.generate"> = {
   stat: "",
   patch: "diff --git a/a b/a\n",
   truncated: false,
+  branch: null,
   recentSubjects: [],
+  recentBodies: [],
   includeBody: false,
+};
+
+const prGenerate: AppMessageOf<"pr.generate"> = {
+  type: "pr.generate",
+  requestId: "p1",
+  branch: "feat/login",
+  base: "main",
+  commits: [{ subject: "feat(auth): add the login form", body: "" }],
+  stat: " src/login.ts | 10 ++++\n 1 file changed, 10 insertions(+)",
+  truncated: false,
 };
 
 const validMessages: Record<string, object> = {
@@ -45,7 +62,9 @@ const validMessages: Record<string, object> = {
     stat: " src/a.ts | 2 +-\n 1 file changed, 1 insertion(+), 1 deletion(-)",
     patch: "diff --git a/src/a.ts b/src/a.ts\n-a\n+b\n",
     truncated: false,
+    branch: "feat/login",
     recentSubjects: ["feat(chat): stream replies", "fix(graph): keep labels"],
+    recentBodies: ["Streaming made replies feel faster.\n\n- Render deltas as they arrive."],
     includeBody: true,
   },
   "commit.generate with nothing to style from": {
@@ -54,8 +73,31 @@ const validMessages: Record<string, object> = {
     stat: "",
     patch: "",
     truncated: true,
+    branch: null,
     recentSubjects: [],
+    recentBodies: [],
     includeBody: false,
+  },
+  "pr.generate": {
+    type: "pr.generate",
+    requestId: "p1",
+    branch: "feat/login",
+    base: "main",
+    commits: [
+      { subject: "feat(auth): add the login form", body: "" },
+      { subject: "fix(auth): trim the email", body: "Pasted addresses kept a trailing space." },
+    ],
+    stat: " src/login.ts | 10 ++++\n 1 file changed, 10 insertions(+)",
+    truncated: false,
+  },
+  "pr.generate with a cut commit list": {
+    type: "pr.generate",
+    requestId: "p2",
+    branch: "fix/x",
+    base: "develop",
+    commits: [],
+    stat: "",
+    truncated: true,
   },
 };
 
@@ -136,6 +178,28 @@ const invalidMessages: Record<string, unknown> = {
     ...commitGenerate,
     recentSubjects: Array.from({ length: MAX_COMMIT_RECENT_SUBJECTS + 1 }, (_, index) => `fix: ${String(index)}`),
   },
+  "commit.generate without branch": { ...commitGenerate, branch: undefined },
+  "commit.generate with a non-string branch": { ...commitGenerate, branch: 4 },
+  "commit.generate without recentBodies": { ...commitGenerate, recentBodies: undefined },
+  "commit.generate with non-array recentBodies": { ...commitGenerate, recentBodies: "why" },
+  "commit.generate with a non-string body": { ...commitGenerate, recentBodies: [4] },
+  "commit.generate with too many recentBodies": {
+    ...commitGenerate,
+    recentBodies: Array.from({ length: MAX_COMMIT_RECENT_BODIES + 1 }, (_, index) => `why ${String(index)}`),
+  },
+  "pr.generate without requestId": { ...prGenerate, requestId: undefined },
+  "pr.generate with empty requestId": { ...prGenerate, requestId: "" },
+  "pr.generate without branch": { ...prGenerate, branch: undefined },
+  "pr.generate with empty branch": { ...prGenerate, branch: "" },
+  "pr.generate without base": { ...prGenerate, base: undefined },
+  "pr.generate with empty base": { ...prGenerate, base: "" },
+  "pr.generate without commits": { ...prGenerate, commits: undefined },
+  "pr.generate with non-array commits": { ...prGenerate, commits: "feat: x" },
+  "pr.generate with a commit without subject": { ...prGenerate, commits: [{ body: "" }] },
+  "pr.generate with a commit without body": { ...prGenerate, commits: [{ subject: "feat: x" }] },
+  "pr.generate with a null commit body": { ...prGenerate, commits: [{ subject: "feat: x", body: null }] },
+  "pr.generate without stat": { ...prGenerate, stat: undefined },
+  "pr.generate with non-boolean truncated": { ...prGenerate, truncated: "no" },
 };
 
 describe("appMessageSchema", () => {
@@ -186,6 +250,7 @@ describe("appMessageSchema", () => {
         "session.setEffort",
         "session.setPermissionMode",
         "commit.generate",
+        "pr.generate",
       ]),
     );
   });
@@ -193,6 +258,23 @@ describe("appMessageSchema", () => {
   test("keeps commit.generate fields intact, including an empty diff", () => {
     const parsed = appMessageSchema.parse({ ...commitGenerate, patch: "", truncated: true });
     expect(parsed).toEqual({ ...commitGenerate, patch: "", truncated: true });
+  });
+
+  test("keeps the branch and recent bodies of commit.generate", () => {
+    const recentBodies = Array.from({ length: MAX_COMMIT_RECENT_BODIES }, (_, index) => `why ${String(index)}`);
+    const message = { ...commitGenerate, branch: "feat/login", recentBodies };
+    expect(appMessageSchema.parse(message)).toEqual(message);
+  });
+
+  test("keeps pr.generate fields intact, including commits without a body", () => {
+    const message = {
+      ...prGenerate,
+      commits: [
+        { subject: "a", body: "" },
+        { subject: "b", body: "why\n\n- bullet" },
+      ],
+    };
+    expect(appMessageSchema.parse(message)).toEqual(message);
   });
 
   test("drops unknown fields so additive changes stay compatible", () => {

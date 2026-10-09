@@ -8,10 +8,12 @@ import { chunksOf } from "./testing/async-helpers";
 import { commitRequest, createCommitHarness } from "./testing/commit-harness";
 import { createFakeFs } from "./testing/fake-fs";
 import { FAKE_OUTPUT_STYLES, FakeQuery } from "./testing/fake-query";
+import { createPullRequestHarness, pullRequestRequest } from "./testing/pr-harness";
 import { assistantMessage, resultMessage, textBlock } from "./testing/sdk-messages";
 
 function setup() {
   const commit = createCommitHarness();
+  const pr = createPullRequestHarness();
   const events = commit.events;
   const queries: FakeQuery[] = [];
   const session = new AgentSession({
@@ -26,9 +28,9 @@ function setup() {
     createSessionId: () => "sid",
     log: () => undefined,
   });
-  const handlers: CommandHandlers = { session, commitMessages: commit.generator };
+  const handlers: CommandHandlers = { session, commitMessages: commit.generator, pullRequests: pr.generator };
   const emit = (event: BridgeEvent) => events.push(event);
-  return { handlers, session, events, queries, commit, emit };
+  return { handlers, session, events, queries, commit, pr, emit };
 }
 
 const start: AppMessage = {
@@ -100,7 +102,11 @@ describe("processLine", () => {
       createSessionId: () => "sid",
       log: () => undefined,
     });
-    const handlers: CommandHandlers = { session, commitMessages: createCommitHarness().generator };
+    const handlers: CommandHandlers = {
+      session,
+      commitMessages: createCommitHarness().generator,
+      pullRequests: createPullRequestHarness().generator,
+    };
 
     await processLine(encodeLine(start).trim(), handlers, (event) => events.push(event));
 
@@ -140,10 +146,54 @@ describe("commit.generate", () => {
     await processLine(encodeLine(commitRequest()).trim(), handlers, emit);
     await processLine(encodeLine(commitRequest()).trim(), handlers, emit);
 
-    expect(events).toEqual([{ type: "error", message: "Commit message request c1 is already running", fatal: false }]);
+    expect(events).toEqual([{ type: "error", message: "Request c1 for a commit message is already running", fatal: false }]);
 
     commit.queries[0]?.end();
     await commit.generator.settled();
+  });
+});
+
+describe("pr.generate", () => {
+  const prReply = '{"title":"feat(auth): add login","body":"## Summary\\n- Add login."}';
+
+  test("is answered by the pull request generator without a started session", async () => {
+    const { handlers, pr, events, queries, emit } = setup();
+
+    await processLine(encodeLine(pullRequestRequest()).trim(), handlers, emit);
+    pr.queries[0]?.push(assistantMessage([textBlock(prReply)]));
+    pr.queries[0]?.push(resultMessage({ result: prReply }));
+    await pr.generator.settled();
+
+    expect(pr.events).toEqual([
+      { type: "pr.generated", requestId: "p1", title: "feat(auth): add login", body: "## Summary\n- Add login." },
+    ]);
+    expect(events).toEqual([]);
+    expect(queries).toHaveLength(0);
+  });
+
+  test("does not start a commit message query", async () => {
+    const { handlers, commit, pr, emit } = setup();
+
+    await processLine(encodeLine(pullRequestRequest()).trim(), handlers, emit);
+
+    expect(commit.queries).toHaveLength(0);
+    expect(pr.queries).toHaveLength(1);
+    pr.queries[0]?.end();
+    await pr.generator.settled();
+  });
+
+  test("reports a request that is already running as a non fatal error", async () => {
+    const { handlers, pr, events, emit } = setup();
+
+    await processLine(encodeLine(pullRequestRequest()).trim(), handlers, emit);
+    await processLine(encodeLine(pullRequestRequest()).trim(), handlers, emit);
+
+    expect(events).toEqual([
+      { type: "error", message: "Request p1 for a pull request description is already running", fatal: false },
+    ]);
+
+    pr.queries[0]?.end();
+    await pr.generator.settled();
   });
 });
 

@@ -3,15 +3,10 @@ import { describe, expect, test } from "bun:test";
 import { COMMIT_MESSAGE_MODEL } from "@flare/protocol";
 
 import { commitRequest, createCommitHarness } from "./testing/commit-harness";
-import type { FakeQuery } from "./testing/fake-query";
+import { answer } from "./testing/one-shot-harness";
 import { assistantMessage, resultMessage, textBlock } from "./testing/sdk-messages";
 
 const reply = (subject: string, body: string | null = null) => JSON.stringify({ subject, body });
-
-function answer(query: FakeQuery<string> | undefined, text: string): void {
-  query?.push(assistantMessage([textBlock(text)]));
-  query?.push(resultMessage({ result: text }));
-}
 
 describe("CommitMessageGenerator", () => {
   test("emits commit.generated for a valid reply", async () => {
@@ -79,6 +74,24 @@ describe("CommitMessageGenerator", () => {
     expect(prompt).toContain("+const a = 2;");
   });
 
+  test("sends the branch and, when a body is wanted, the recent bodies as the prompt", async () => {
+    const { generator, queries } = createCommitHarness();
+
+    generator.request(
+      commitRequest({
+        includeBody: true,
+        branch: "feat/login",
+        recentBodies: ["Sessions expired silently.\n\n- Warn before expiry."],
+      }),
+    );
+    answer(queries[0], reply("feat(login): add the form"));
+    await generator.settled();
+
+    const prompt = queries[0]?.params.prompt;
+    expect(prompt).toContain("Current branch: feat/login");
+    expect(prompt).toContain("<example>\nSessions expired silently.");
+  });
+
   test("closes its query once it has an answer", async () => {
     const { generator, queries } = createCommitHarness();
 
@@ -119,7 +132,7 @@ describe("CommitMessageGenerator", () => {
     generator.request(commitRequest());
     expect(() => {
       generator.request(commitRequest());
-    }).toThrow("Commit message request c1 is already running");
+    }).toThrow("Request c1 for a commit message is already running");
 
     answer(queries[0], reply("fix: x"));
     await generator.settled();

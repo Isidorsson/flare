@@ -224,8 +224,19 @@ describe("standalone requests", () => {
     stat: " a.ts | 1 +",
     patch: "diff --git a/a.ts b/a.ts\n+a\n",
     truncated: false,
+    branch: null,
     recentSubjects: [],
+    recentBodies: [],
     includeBody: false,
+  };
+  const pullRequestRequest: AppMessage = {
+    type: "pr.generate",
+    requestId: "p1",
+    branch: "feat/login",
+    base: "main",
+    commits: [{ subject: "feat: login", body: "" }],
+    stat: " a.ts | 1 +",
+    truncated: false,
   };
 
   test("starts the bridge if it is not running and sends without creating a thread or session", async () => {
@@ -308,6 +319,37 @@ describe("standalone requests", () => {
 
     expect(ctx.state().threads).toEqual([]);
     expect(ctx.published).toEqual([{ type: "commit.failed", requestId: "c1", message: "nope" }]);
+  });
+
+  test("sends a pull request request the same way, without creating a thread", async () => {
+    const ctx = setup();
+
+    await ctx.state().sendStandalone(pullRequestRequest);
+
+    expect(ctx.sent).toEqual([pullRequestRequest]);
+    expect(ctx.state().threads).toEqual([]);
+  });
+
+  test("publishes pull request replies to subscribers without adding them to the live thread", async () => {
+    const ctx = setup();
+    await startThread(ctx);
+    const before = selectLiveThread(ctx.state());
+
+    ctx.emit({ type: "pr.generated", requestId: "p1", title: "feat: login", body: "## Summary" });
+    ctx.emit({ type: "pr.failed", requestId: "p2", message: "nope" });
+
+    expect(ctx.published.map((event) => event.type)).toEqual(["session.ready", "pr.generated", "pr.failed"]);
+    expect(selectLiveThread(ctx.state())).toEqual(before);
+  });
+
+  test("keeps pull request replies out of an idle conversation, even with no live session", async () => {
+    const ctx = setup();
+    await ctx.state().sendStandalone(pullRequestRequest);
+
+    ctx.emit({ type: "pr.failed", requestId: "p1", message: "nope" });
+
+    expect(ctx.state().threads).toEqual([]);
+    expect(ctx.published).toEqual([{ type: "pr.failed", requestId: "p1", message: "nope" }]);
   });
 });
 

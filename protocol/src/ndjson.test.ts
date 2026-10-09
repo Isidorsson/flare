@@ -26,7 +26,9 @@ describe("encodeLine", () => {
       stat: " a.ts | 1 +",
       patch: "diff --git a/a.ts b/a.ts\r\n+line\n",
       truncated: false,
+      branch: "fix/x",
       recentSubjects: ["fix: x"],
+      recentBodies: ["why\n\n- more"],
       includeBody: true,
     };
     const line = encodeLine(request);
@@ -34,6 +36,29 @@ describe("encodeLine", () => {
     expect(parseAppMessage(line.trim())).toEqual(request);
 
     const generated: BridgeEvent = { type: "commit.generated", requestId: "c1", subject: "fix: x", body: "why\n\nmore" };
+    expect(parseBridgeEvent(encodeLine(generated).trim())).toEqual(generated);
+  });
+
+  test("round trips pull request generation with a Markdown body", () => {
+    const request: AppMessage = {
+      type: "pr.generate",
+      requestId: "p1",
+      branch: "feat/login",
+      base: "main",
+      commits: [{ subject: "feat: login", body: "line one\nline two" }],
+      stat: " a.ts | 1 +\r\n 1 file changed",
+      truncated: false,
+    };
+    const line = encodeLine(request);
+    expect(line.slice(0, -1)).not.toContain("\n");
+    expect(parseAppMessage(line.trim())).toEqual(request);
+
+    const generated: BridgeEvent = {
+      type: "pr.generated",
+      requestId: "p1",
+      title: "feat: login",
+      body: "## Summary\n- Add login.\n\n## Why\nNeeded.",
+    };
     expect(parseBridgeEvent(encodeLine(generated).trim())).toEqual(generated);
   });
 });

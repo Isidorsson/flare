@@ -1,6 +1,7 @@
 import { parseAppMessage, splitLines, type AppMessage, type BridgeEvent } from "@flare/protocol";
 
 import type { CommitMessageGenerator } from "./commit-message";
+import type { PullRequestGenerator } from "./pr-message";
 import type { AgentSession } from "./session";
 
 type Emit = (event: BridgeEvent) => void;
@@ -8,9 +9,13 @@ type Emit = (event: BridgeEvent) => void;
 export interface CommandHandlers {
   session: AgentSession;
   commitMessages: CommitMessageGenerator;
+  pullRequests: PullRequestGenerator;
 }
 
-export async function handleCommand({ session, commitMessages }: CommandHandlers, message: AppMessage): Promise<void> {
+export async function handleCommand(
+  { session, commitMessages, pullRequests }: CommandHandlers,
+  message: AppMessage,
+): Promise<void> {
   switch (message.type) {
     case "session.start":
       session.start(message);
@@ -35,6 +40,9 @@ export async function handleCommand({ session, commitMessages }: CommandHandlers
       return;
     case "commit.generate":
       commitMessages.request(message);
+      return;
+    case "pr.generate":
+      pullRequests.request(message);
       return;
   }
 }

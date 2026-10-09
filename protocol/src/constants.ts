@@ -10,13 +10,23 @@ export const MAX_MATCH_LINES = 200;
 // Streaming edit previews stop growing past this; the final file.change still carries everything.
 export const MAX_EDITING_TEXT_CHARS = 20_000;
 
-// Commit messages are written by a small, fast model in a one-shot query that is independent of the chat session.
+// Commit messages and pull request descriptions are written by a small, fast model in one-shot queries that are
+// independent of the chat session.
 export const COMMIT_MESSAGE_MODEL = "claude-haiku-5-5";
 export const COMMIT_SUBJECT_MAX_CHARS = 72;
 export const COMMIT_BODY_WRAP_CHARS = 72;
 export const MAX_COMMIT_RECENT_SUBJECTS = 20;
+export const MAX_COMMIT_RECENT_BODIES = 3;
 // The diff is cut to this many characters before it reaches the model, however much the app sent.
 export const COMMIT_PROMPT_MAX_PATCH_CHARS = 60_000;
+export const COMMIT_PROMPT_MAX_RECENT_BODY_CHARS = 1_000;
+export const PROMPT_MAX_BRANCH_CHARS = 100;
+
+export const PR_TITLE_MAX_CHARS = 72;
+export const PR_PROMPT_MAX_COMMITS = 50;
+export const PR_PROMPT_MAX_COMMIT_BODY_CHARS = 600;
+export const PR_PROMPT_MAX_STAT_CHARS = 10_000;
+
 // The bridge gives up on a hung generation first, so its reason reaches the app before the app's own timeout fires.
-export const COMMIT_MESSAGE_BRIDGE_TIMEOUT_MS = 45_000;
-export const COMMIT_MESSAGE_APP_TIMEOUT_MS = COMMIT_MESSAGE_BRIDGE_TIMEOUT_MS + 15_000;
+export const ONE_SHOT_BRIDGE_TIMEOUT_MS = 45_000;
+export const ONE_SHOT_APP_TIMEOUT_MS = ONE_SHOT_BRIDGE_TIMEOUT_MS + 15_000;

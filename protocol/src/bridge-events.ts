@@ -6,6 +6,7 @@ import {
   FILE_EDITING_KINDS,
   MAX_EDITING_TEXT_CHARS,
   MAX_MATCH_LINES,
+  PR_TITLE_MAX_CHARS,
 } from "./constants";
 
 const nonEmpty = z.string().min(1);
@@ -142,6 +143,20 @@ export const commitFailedSchema = z.object({
   message: z.string(),
 });
 
+export const prGeneratedSchema = z.object({
+  type: z.literal("pr.generated"),
+  requestId: nonEmpty,
+  title: nonEmpty.max(PR_TITLE_MAX_CHARS),
+  // Markdown; may be empty when the model wrote nothing beyond the title.
+  body: z.string(),
+});
+
+export const prFailedSchema = z.object({
+  type: z.literal("pr.failed"),
+  requestId: nonEmpty,
+  message: z.string(),
+});
+
 export const bridgeEventSchema = z.discriminatedUnion("type", [
   sessionReadySchema,
   sessionOutputStylesSchema,
@@ -158,6 +173,8 @@ export const bridgeEventSchema = z.discriminatedUnion("type", [
   errorSchema,
   commitGeneratedSchema,
   commitFailedSchema,
+  prGeneratedSchema,
+  prFailedSchema,
 ]);
 
 export type ToolInput = z.infer<typeof toolInputSchema>;

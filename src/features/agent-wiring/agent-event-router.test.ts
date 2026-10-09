@@ -67,6 +67,15 @@ describe("commit messages", () => {
   });
 });
 
+describe("pull request descriptions", () => {
+  test("are not agent activity and reach no sink", () => {
+    const { route, changes, reads, editing, calls } = setup();
+    route({ type: "pr.generated", requestId: "p1", title: "fix: x", body: "## Summary\n- x" });
+    route({ type: "pr.failed", requestId: "p2", message: "nope" });
+    expect([changes, reads, editing, calls]).toEqual([[], [], [], []]);
+  });
+});
+
 describe("turns", () => {
   test("starts a new turn with each turn.started and tells the files panel", () => {
     const { route, changes, calls } = setup();
