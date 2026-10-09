@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use tempfile::TempDir;
 
 use super::error::CheckpointError;
-use super::git::{Invocation, INDEX_FILE_ENV};
+use crate::git_cli::{Invocation, INDEX_FILE_ENV};
 
 const SCRATCH_PREFIX: &str = "flare-index-";
 const SCRATCH_FILE: &str = "index";

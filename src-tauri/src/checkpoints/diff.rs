@@ -8,8 +8,8 @@
 use std::collections::HashMap;
 
 use super::error::CheckpointError;
-use super::git::Git;
 use super::model::{FileDelta, FileStatus};
+use crate::git_cli::Git;
 
 const GITLINK_MODE: &str = "160000";
 const ABSENT_MODE: &str = "000000";

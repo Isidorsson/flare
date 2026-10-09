@@ -18,13 +18,12 @@
 //!
 //! A "session" here is only the scope snapshots are grouped by; Flare passes the thread id.
 //!
-//! Git is driven through the `git` executable (`git.rs`), never through a shell.
+//! Git is driven through the `git` executable (`crate::git_cli`), never through a shell.
 
 mod apply;
 pub mod commands;
 mod diff;
 mod error;
-mod git;
 mod index;
 mod model;
 mod plan;

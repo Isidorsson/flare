@@ -8,10 +8,10 @@
 //! `.gitattributes`), as `git stash` does, so a restored file follows the user's git settings.
 
 use super::error::CheckpointError;
-use super::git::{Git, Output};
 use super::index::{on_index, ScratchIndex};
 use super::model::StoreKind;
 use super::workspace::Workspace;
+use crate::git_cli::{Git, Output};
 
 const AUTHOR_NAME: &str = "Flare";
 const AUTHOR_EMAIL: &str = "flare@localhost";
@@ -62,13 +62,14 @@ pub fn commit_tree(
         .env("GIT_COMMITTER_DATE", &date)
         .run()?
         .text()
+        .map_err(CheckpointError::from)
 }
 
 fn skipped_files(added: Output) -> Result<Vec<String>, CheckpointError> {
     match added.code {
         0 => Ok(Vec::new()),
         SKIPPED_FILES_EXIT => Ok(error_lines(&added.stderr)),
-        _ => Err(added.into_error()),
+        _ => Err(added.into_error().into()),
     }
 }
 

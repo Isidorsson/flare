@@ -7,8 +7,8 @@ use serde::{Serialize, Serializer};
 use crate::git_cli::GitError;
 
 #[derive(Debug, thiserror::Error)]
-pub enum CheckpointError {
-    #[error("checkpoints need git, but {0} could not be started: install git and make sure it is on your PATH")]
+pub enum VcsError {
+    #[error("the Changes tab needs git, but {0} could not be started: install git and make sure it is on your PATH")]
     GitMissing(String),
     #[error("git {command} failed: {stderr}")]
     Git { command: String, stderr: String },
@@ -16,16 +16,24 @@ pub enum CheckpointError {
     Timeout { command: String, seconds: u64 },
     #[error("unexpected output from git {command}: {detail}")]
     Output { command: String, detail: String },
-    #[error("invalid checkpoint request: {0}")]
+    #[error("invalid request: {0}")]
     InvalidRequest(String),
     #[error("not a folder: {0}")]
     NotAFolder(String),
-    #[error(
-        "{path} holds more than {limit} files and is not a git repository, so checkpoints would be slow: run `git init` there (and ignore build output) to enable them"
-    )]
-    TooLarge { path: String, limit: usize },
+    #[error("{0} is not inside a git repository")]
+    NotARepository(String),
+    #[error("the commit message is empty")]
+    EmptyMessage,
+    #[error("nothing is staged: stage some changes before committing")]
+    NothingStaged,
+    #[error("there are no changes to describe")]
+    NothingToDescribe,
+    #[error("HEAD is detached: switch to a branch first")]
+    DetachedHead,
     #[error("{0}")]
-    NoCheckpoint(String),
+    NoRemote(String),
+    #[error("branch {0} has no upstream: push it first")]
+    NoUpstream(String),
     #[error("{path}: {source}")]
     Io {
         path: String,
@@ -36,11 +44,18 @@ pub enum CheckpointError {
     Task(String),
 }
 
-impl CheckpointError {
+impl VcsError {
     pub fn io(path: &Path, source: io::Error) -> Self {
         Self::Io {
             path: path.display().to_string(),
             source,
+        }
+    }
+
+    pub fn output(command: &str, detail: impl Into<String>) -> Self {
+        Self::Output {
+            command: command.to_owned(),
+            detail: detail.into(),
         }
     }
 
@@ -52,15 +67,20 @@ impl CheckpointError {
             Self::Output { .. } => "output",
             Self::InvalidRequest(_) => "invalid_request",
             Self::NotAFolder(_) => "not_a_folder",
-            Self::TooLarge { .. } => "too_large",
-            Self::NoCheckpoint(_) => "no_checkpoint",
+            Self::NotARepository(_) => "not_a_repository",
+            Self::EmptyMessage => "empty_message",
+            Self::NothingStaged => "nothing_staged",
+            Self::NothingToDescribe => "nothing_to_describe",
+            Self::DetachedHead => "detached_head",
+            Self::NoRemote(_) => "no_remote",
+            Self::NoUpstream(_) => "no_upstream",
             Self::Io { .. } => "io",
             Self::Task(_) => "task",
         }
     }
 }
 
-impl From<GitError> for CheckpointError {
+impl From<GitError> for VcsError {
     fn from(error: GitError) -> Self {
         match error {
             GitError::Missing(program) => Self::GitMissing(program),
@@ -73,9 +93,9 @@ impl From<GitError> for CheckpointError {
     }
 }
 
-impl Serialize for CheckpointError {
+impl Serialize for VcsError {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let mut state = serializer.serialize_struct("CheckpointError", 2)?;
+        let mut state = serializer.serialize_struct("VcsError", 2)?;
         state.serialize_field("code", self.code())?;
         state.serialize_field("message", &self.to_string())?;
         state.end()
@@ -88,36 +108,30 @@ mod tests {
 
     #[test]
     fn serializes_code_and_message() {
-        let json = serde_json::to_value(CheckpointError::NoCheckpoint("turn 3 is gone".to_owned()))
-            .expect("serializes");
-        assert_eq!(json["code"], "no_checkpoint");
-        assert_eq!(json["message"], "turn 3 is gone");
+        let json = serde_json::to_value(VcsError::NothingStaged).expect("serializes");
+        assert_eq!(json["code"], "nothing_staged");
+        assert_eq!(
+            json["message"],
+            "nothing is staged: stage some changes before committing"
+        );
     }
 
     #[test]
     fn runner_errors_keep_their_codes_and_messages() {
-        let failed = CheckpointError::from(GitError::Failed {
-            command: "add".to_owned(),
-            stderr: "boom".to_owned(),
+        let failed = VcsError::from(GitError::Failed {
+            command: "push".to_owned(),
+            stderr: "rejected".to_owned(),
         });
         assert_eq!(failed.code(), "git");
-        assert_eq!(failed.to_string(), "git add failed: boom");
-        let missing = CheckpointError::from(GitError::Missing("git".to_owned()));
-        assert_eq!(missing.code(), "git_missing");
-        let timeout = CheckpointError::from(GitError::Timeout {
-            command: "gc".to_owned(),
-            seconds: 5,
+        assert_eq!(failed.to_string(), "git push failed: rejected");
+        assert_eq!(
+            VcsError::from(GitError::Missing("git".to_owned())).code(),
+            "git_missing"
+        );
+        let timeout = VcsError::from(GitError::Timeout {
+            command: "fetch".to_owned(),
+            seconds: 600,
         });
         assert_eq!(timeout.code(), "timeout");
-    }
-
-    #[test]
-    fn git_failures_name_the_command_and_the_reason() {
-        let error = CheckpointError::Git {
-            command: "add".to_owned(),
-            stderr: "boom".to_owned(),
-        };
-        assert_eq!(error.to_string(), "git add failed: boom");
-        assert_eq!(error.code(), "git");
     }
 }

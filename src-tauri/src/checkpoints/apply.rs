@@ -7,10 +7,10 @@ use std::io::ErrorKind;
 use std::path::{Component, Path, PathBuf};
 
 use super::error::CheckpointError;
-use super::git::INDEX_FILE_ENV;
 use super::index::ScratchIndex;
 use super::model::{FileAction, PlannedFile};
 use super::workspace::Workspace;
+use crate::git_cli::INDEX_FILE_ENV;
 
 const GIT_ENTRY: &str = ".git";
 

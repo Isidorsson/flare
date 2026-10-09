@@ -14,8 +14,8 @@ use std::path::{Path, PathBuf};
 use ignore::WalkBuilder;
 
 use super::error::CheckpointError;
-use super::git::Git;
 use super::model::StoreKind;
+use crate::git_cli::Git;
 
 pub const PRIVATE_REPO_FILE_LIMIT: usize = 20_000;
 const GIT_ENTRY: &str = ".git";
