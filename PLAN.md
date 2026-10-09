@@ -130,7 +130,7 @@ Stage, commit, branch, pull and push from a **Changes** tab in the right panel (
 - [ ] Unverified: live Haiku generation, push/pull against HTTPS/SSH remotes (a credential manager window can block up to the 10 min network timeout), panel layout in the running app.
 - [ ] Later: hunk/line staging, amend, stash.
 
-#### Pull requests and richer commit context (in progress)
+#### Pull requests and richer commit context (done 2026-10-09)
 **Commit context upgrade.** `vcs_message_context` also returns `branch: string | null` and `recentBodies: string[]` (bodies of the last 3 commits that have one, newest first, each trimmed and capped at `RECENT_BODY_LIMIT` chars). `commit.generate` gains the same two fields; the prompt uses the branch name as a hint for type and scope (`feat/login` → `feat(login)`) and the bodies as the style to follow for descriptions.
 
 **Rust** (in `vcs/`, via the `gh` CLI run through `git_cli`-style runner: no shell, `GH_PROMPT_DISABLED=1`, `GH_NO_UPDATE_NOTIFIER=1`, network timeout). Same `{ request: { root, ... } }` shape and `{ code, message }` errors; new codes `gh_missing`, `gh_unauthenticated`, `no_commits` (branch has nothing ahead of base), `on_base_branch`.
@@ -142,9 +142,10 @@ Stage, commit, branch, pull and push from a **Changes** tab in the right panel (
 
 **UI**: a collapsible "Pull request" section in the Changes tab, below the commit box. Hidden on the default base branch and detached HEAD. If `gh` is missing or signed out it explains the fix (`winget install GitHub.cli`, `gh auth login`). If `current` exists it shows `#N title`, state and Open in browser (`tauri-plugin-opener`). Otherwise: base picker (default `defaultBase`), title, body, Generate (sparkles), Draft toggle, Create PR. Generator injected through `configureVcs({ generateMessage, generatePullRequest })`. Commit generation passes `branch` and `recentBodies` through.
 
-- [ ] Phase D: Rust (context upgrade + `vcs_pr_*`).
-- [ ] Phase E: protocol + bridge (`commit.generate` new fields, `pr.generate`) + `pr-message.ts`.
-- [ ] Phase F: UI (pull request section, pass-through of new commit fields).
+- [x] Phase D: Rust (context upgrade + `vcs_pr_*`). gh reads time out at 60 s; create refuses before pushing; over 50 commits keeps the newest.
+- [x] Phase E: protocol + bridge (`commit.generate` new fields, `pr.generate`) + `pr-message.ts`; shared one-shot runner.
+- [x] Phase F: UI (pull request section, pass-through of new commit fields); drafts kept per branch.
+- [ ] Unverified: real `gh pr create` against GitHub, live Haiku PR/commit text, section layout in a short window.
 
 ### Next
 - [ ] **6. Polish (original plan).**
