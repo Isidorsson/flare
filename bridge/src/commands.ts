@@ -1,10 +1,16 @@
 import { parseAppMessage, splitLines, type AppMessage, type BridgeEvent } from "@flare/protocol";
 
+import type { CommitMessageGenerator } from "./commit-message";
 import type { AgentSession } from "./session";
 
 type Emit = (event: BridgeEvent) => void;
 
-export async function handleCommand(session: AgentSession, message: AppMessage): Promise<void> {
+export interface CommandHandlers {
+  session: AgentSession;
+  commitMessages: CommitMessageGenerator;
+}
+
+export async function handleCommand({ session, commitMessages }: CommandHandlers, message: AppMessage): Promise<void> {
   switch (message.type) {
     case "session.start":
       session.start(message);
@@ -27,14 +33,17 @@ export async function handleCommand(session: AgentSession, message: AppMessage):
     case "session.setPermissionMode":
       await session.setPermissionMode(message.permissionMode);
       return;
+    case "commit.generate":
+      commitMessages.request(message);
+      return;
   }
 }
 
-export async function processLine(line: string, session: AgentSession, emit: Emit): Promise<void> {
+export async function processLine(line: string, handlers: CommandHandlers, emit: Emit): Promise<void> {
   let message: AppMessage | null = null;
   try {
     message = parseAppMessage(line);
-    await handleCommand(session, message);
+    await handleCommand(handlers, message);
   } catch (error) {
     emit({
       type: "error",
@@ -46,7 +55,7 @@ export async function processLine(line: string, session: AgentSession, emit: Emi
 
 export async function runCommandLoop(
   chunks: AsyncIterable<Uint8Array>,
-  session: AgentSession,
+  handlers: CommandHandlers,
   emit: Emit,
 ): Promise<void> {
   const decoder = new TextDecoder();
@@ -54,7 +63,7 @@ export async function runCommandLoop(
   for await (const chunk of chunks) {
     const split = splitLines(rest, decoder.decode(chunk, { stream: true }));
     rest = split.rest;
-    for (const line of split.lines) await processLine(line, session, emit);
+    for (const line of split.lines) await processLine(line, handlers, emit);
   }
-  for (const line of splitLines(rest, `${decoder.decode()}\n`).lines) await processLine(line, session, emit);
+  for (const line of splitLines(rest, `${decoder.decode()}\n`).lines) await processLine(line, handlers, emit);
 }
