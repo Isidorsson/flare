@@ -3,7 +3,7 @@ import type { StateStorage } from "zustand/middleware";
 
 import { createSafeStorage } from "@/shared/lib/safe-storage";
 
-import { PANE_LIMITS, LAYOUT_STORAGE_KEY, LAYOUT_STORAGE_VERSION } from "./layout-constants";
+import { PANE_LIMITS, LAYOUT_STORAGE_KEY, LAYOUT_STORAGE_VERSION, RIGHT_VIEWS } from "./layout-constants";
 import { DEFAULT_LAYOUT, createLayoutStore } from "./layout-store";
 
 function memoryStorage(initial: Record<string, string> = {}) {
@@ -68,6 +68,14 @@ describe("layout store defaults and actions", () => {
     store.getState().setRightView("split");
     expect(store.getState().rightView).toBe("split");
   });
+
+  test("offers the Changes view after Files, Graph and Split", () => {
+    expect(RIGHT_VIEWS).toEqual(["files", "graph", "split", "changes"]);
+    const store = createLayoutStore(memoryStorage().storage);
+
+    store.getState().setRightView("changes");
+    expect(store.getState().rightView).toBe("changes");
+  });
 });
 
 describe("layout store persistence", () => {
@@ -102,6 +110,24 @@ describe("layout store persistence", () => {
       terminalOpen: false,
       graphWidth: 500,
     });
+  });
+
+  test("restores the Changes view as the open right view", () => {
+    const { storage } = memoryStorage({
+      [LAYOUT_STORAGE_KEY]: persistedEntry({ ...DEFAULT_LAYOUT, rightView: "changes" }),
+    });
+
+    expect(createLayoutStore(storage).getState().rightView).toBe("changes");
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  test("discards a persisted right view that is not one of the views", () => {
+    const { storage } = memoryStorage({
+      [LAYOUT_STORAGE_KEY]: persistedEntry({ ...DEFAULT_LAYOUT, rightView: "review" }),
+    });
+
+    expect(createLayoutStore(storage).getState().rightView).toBe(DEFAULT_LAYOUT.rightView);
+    expect(warn).toHaveBeenCalledTimes(1);
   });
 
   test("clamps persisted sizes that fall outside the limits", () => {

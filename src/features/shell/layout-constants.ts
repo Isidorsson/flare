@@ -1,4 +1,4 @@
-export const RIGHT_VIEWS = ["files", "graph", "split"] as const;
+export const RIGHT_VIEWS = ["files", "graph", "split", "changes"] as const;
 export type RightView = (typeof RIGHT_VIEWS)[number];
 
 export interface PaneLimits {

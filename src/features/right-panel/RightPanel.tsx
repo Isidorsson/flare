@@ -1,4 +1,4 @@
-import { Columns2, FolderTree, Network, type LucideIcon } from "lucide-react";
+import { Columns2, FolderTree, GitBranch, Network, type LucideIcon } from "lucide-react";
 import type { KeyboardEvent } from "react";
 
 import { openFile } from "@/features/files";
@@ -6,6 +6,7 @@ import { FilesPanel } from "@/features/files/FilesPanel";
 import { GraphPanel } from "@/features/graph/GraphPanel";
 import { RIGHT_VIEWS, type RightView } from "@/features/shell/layout-constants";
 import { useLayout } from "@/features/shell/use-layout";
+import { ChangesPanel, refreshVcs, useChangedFileCount } from "@/features/vcs";
 import type { SizeBounds } from "@/shared/lib/splitter-math";
 import { Splitter } from "@/shared/ui/Splitter";
 import { Tooltip } from "@/shared/ui/Tooltip";
@@ -20,7 +21,11 @@ const VIEWS: Record<RightView, ViewDefinition> = {
   files: { label: "Files", hint: "Show the file tree and editor", icon: FolderTree },
   graph: { label: "Graph", hint: "Show the code graph of imports and agent activity", icon: Network },
   split: { label: "Split", hint: "Show files and graph side by side", icon: Columns2 },
+  changes: { label: "Changes", hint: "Stage, commit, branch and push with git", icon: GitBranch },
 };
+
+// The four tabs need about 380px with their labels; narrower than that only the open tab keeps its label.
+const LABEL_WHEN_ROOMY = "hidden @sm:inline";
 
 const tabId = (view: RightView) => `right-tab-${view}`;
 const PANEL_ID = "right-panel-view";
@@ -41,7 +46,15 @@ function openFromGraph(path: string) {
   });
 }
 
-function ViewTab({ view, selected, onSelect }: { view: RightView; selected: boolean; onSelect: () => void }) {
+interface ViewTabProps {
+  view: RightView;
+  selected: boolean;
+  /** A count shown beside the label while it is above zero. */
+  badge?: number;
+  onSelect: () => void;
+}
+
+function ViewTab({ view, selected, badge = 0, onSelect }: ViewTabProps) {
   const { label, hint, icon: Icon } = VIEWS[view];
   const tone = selected ? "border-accent text-fg" : "border-transparent text-fg-muted hover:text-fg";
   return (
@@ -52,12 +65,16 @@ function ViewTab({ view, selected, onSelect }: { view: RightView; selected: bool
         role="tab"
         aria-selected={selected}
         aria-controls={PANEL_ID}
+        aria-label={label}
         tabIndex={selected ? 0 : -1}
         onClick={onSelect}
-        className={`-mb-px flex h-9 items-center gap-2 border-b-2 px-3 text-sm transition-colors ${tone}`}
+        className={`-mb-px flex h-9 items-center gap-1.5 border-b-2 px-2.5 text-sm transition-colors ${tone}`}
       >
         <Icon aria-hidden className="size-4" />
-        {label}
+        <span className={selected ? undefined : LABEL_WHEN_ROOMY}>{label}</span>
+        {badge > 0 ? (
+          <span className="rounded-full bg-accent-soft px-1.5 text-[10px] leading-4 text-accent">{badge}</span>
+        ) : null}
       </button>
     </Tooltip>
   );
@@ -92,6 +109,12 @@ function SplitView({ graphWidth, graphBounds, onResizeGraph }: RightPanelProps) 
 export function RightPanel(props: RightPanelProps) {
   const view = useLayout((state) => state.rightView);
   const setRightView = useLayout((state) => state.setRightView);
+  const changedFiles = useChangedFileCount();
+
+  function showView(next: RightView) {
+    setRightView(next);
+    if (next === "changes") void refreshVcs();
+  }
 
   function openFromGraphView(path: string) {
     setRightView("files");
@@ -102,7 +125,7 @@ export function RightPanel(props: RightPanelProps) {
     const next = neighbourView(view, event.key);
     if (next === null) return;
     event.preventDefault();
-    setRightView(next);
+    showView(next);
     document.getElementById(tabId(next))?.focus();
   }
 
@@ -112,15 +135,16 @@ export function RightPanel(props: RightPanelProps) {
         role="tablist"
         aria-label="Inspector views"
         onKeyDown={handleKeyDown}
-        className="flex h-11 shrink-0 items-end gap-1 border-b border-border px-2"
+        className="@container flex h-11 shrink-0 items-end gap-1 border-b border-border px-2"
       >
         {RIGHT_VIEWS.map((option) => (
           <ViewTab
             key={option}
             view={option}
             selected={option === view}
+            {...(option === "changes" ? { badge: changedFiles } : {})}
             onSelect={() => {
-              setRightView(option);
+              showView(option);
             }}
           />
         ))}
@@ -129,6 +153,7 @@ export function RightPanel(props: RightPanelProps) {
         {view === "files" ? <FilesPanel /> : null}
         {view === "graph" ? <GraphPanel onOpenFile={openFromGraphView} /> : null}
         {view === "split" ? <SplitView {...props} /> : null}
+        {view === "changes" ? <ChangesPanel /> : null}
       </div>
     </div>
   );
