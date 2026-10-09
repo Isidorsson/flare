@@ -5,6 +5,7 @@ mod git_cli;
 mod graph;
 mod proctree;
 mod pty;
+mod vcs;
 
 use tauri::{AppHandle, Manager, RunEvent};
 
@@ -17,6 +18,7 @@ pub fn run() {
         .manage(fs::FsState::default())
         .manage(graph::GraphState::default())
         .manage(pty::PtyState::default())
+        .manage(vcs::VcsState::default())
         .invoke_handler(tauri::generate_handler![
             bridge::bridge_start,
             bridge::bridge_send,
@@ -43,6 +45,20 @@ pub fn run() {
             pty::commands::pty_resize,
             pty::commands::pty_kill,
             pty::commands::pty_kill_all,
+            vcs::commands::vcs_status,
+            vcs::commands::vcs_file_diff,
+            vcs::commands::vcs_stage,
+            vcs::commands::vcs_unstage,
+            vcs::commands::vcs_discard,
+            vcs::commands::vcs_commit,
+            vcs::commands::vcs_branches,
+            vcs::commands::vcs_branch_create,
+            vcs::commands::vcs_switch,
+            vcs::commands::vcs_branch_delete,
+            vcs::commands::vcs_fetch,
+            vcs::commands::vcs_pull,
+            vcs::commands::vcs_push,
+            vcs::commands::vcs_message_context,
         ])
         .setup(|app| {
             graph::watch::spawn(app.handle().clone());

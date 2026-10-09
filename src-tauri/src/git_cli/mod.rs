@@ -124,6 +124,12 @@ impl Invocation<'_> {
         self
     }
 
+    /// Replaces `DEFAULT_TIMEOUT` for commands that legitimately take longer.
+    pub fn timeout(mut self, timeout: Duration) -> Self {
+        self.timeout = timeout;
+        self
+    }
+
     /// Runs the command and fails unless it exits with status 0.
     pub fn run(self) -> Result<Output, GitError> {
         let output = self.run_unchecked()?;
@@ -192,11 +198,18 @@ impl Invocation<'_> {
 }
 
 impl Output {
-    /// The error for a run whose exit status the caller read and rejected.
+    /// The error for a run whose exit status the caller read and rejected. Some refusals are
+    /// written to standard output (`git commit` saying there is nothing to commit, a hook), so
+    /// that stands in for an empty standard error.
     pub fn into_error(self) -> GitError {
+        let detail = if self.stderr.is_empty() {
+            truncate(String::from_utf8_lossy(&self.stdout).trim().to_owned())
+        } else {
+            self.stderr
+        };
         GitError::Failed {
             command: self.command,
-            stderr: self.stderr,
+            stderr: detail,
         }
     }
 
@@ -325,6 +338,27 @@ mod tests {
     }
 
     #[test]
+    fn a_refusal_written_to_standard_output_is_not_lost() {
+        let error = here()
+            .with_global_args(["-c", "alias.refuse=!echo no thanks; exit 1"])
+            .command(["refuse"])
+            .run()
+            .expect_err("the alias exits with 1");
+        assert_eq!(error.to_string(), "git refuse failed: no thanks");
+    }
+
+    #[test]
+    fn standard_error_wins_over_standard_output_when_both_have_text() {
+        let alias = "alias.both=!echo to-stdout; echo to-stderr >&2; exit 1";
+        let error = here()
+            .with_global_args(["-c", alias])
+            .command(["both"])
+            .run()
+            .expect_err("the alias exits with 1");
+        assert_eq!(error.to_string(), "git both failed: to-stderr");
+    }
+
+    #[test]
     fn unchecked_runs_return_the_exit_code() {
         let output = here()
             .command(["rev-parse", "--verify", "no-such-rev"])
@@ -382,6 +416,15 @@ mod tests {
             .run()
             .expect("alias runs");
         assert_eq!(echoed.text().expect("utf8"), "0");
+    }
+
+    #[test]
+    fn the_timeout_can_be_changed_per_invocation() {
+        let git = here();
+        let default = git.command(["--version"]);
+        assert_eq!(default.timeout, DEFAULT_TIMEOUT);
+        let longer = git.command(["--version"]).timeout(Duration::from_secs(900));
+        assert_eq!(longer.timeout, Duration::from_secs(900));
     }
 
     #[test]
