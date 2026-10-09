@@ -218,6 +218,26 @@ impl Fixture {
     pub fn message_context(&self) -> Result<MessageContext, VcsError> {
         self.state.message_context(self.root_request())
     }
+
+    /// Commits with a subject and a body paragraph, straight through git.
+    pub fn commit_with_body(&self, subject: &str, body: &str) {
+        self.git(&[
+            "commit",
+            "--quiet",
+            "--allow-empty",
+            "-m",
+            subject,
+            "-m",
+            body,
+        ]);
+    }
+
+    /// Empty commits, one per subject, oldest first.
+    pub fn commit_empty(&self, subjects: &[String]) {
+        for subject in subjects {
+            self.git(&["commit", "--quiet", "--allow-empty", "-m", subject]);
+        }
+    }
 }
 
 fn configure(root: &Path) {

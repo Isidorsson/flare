@@ -1,15 +1,22 @@
 //! What a commit-message generator is shown: the diff about to be committed, cut to a size a model
-//! can read, plus recent subjects as a style hint. The size limits are here and nowhere else.
+//! can read, plus the branch name and recent subjects and bodies as hints for type, scope and
+//! style. The size limits are here and nowhere else.
 
 use super::error::VcsError;
 use super::model::{DiffSource, MessageContext};
 use super::repo::Repo;
+use super::text::{cap_chars, lossy};
 
 /// Bytes of patch text sent in total, markers included.
 pub const MESSAGE_PATCH_LIMIT: usize = 48 * 1024;
 /// Bytes of patch text kept per file, so one generated file or lockfile cannot use the budget.
 pub const MESSAGE_FILE_PATCH_LIMIT: usize = 8 * 1024;
 const RECENT_SUBJECT_COUNT: usize = 10;
+/// Characters kept of each recent commit body.
+pub const RECENT_BODY_LIMIT: usize = 1_200;
+const RECENT_BODY_COUNT: usize = 3;
+/// Commits looked through to find `RECENT_BODY_COUNT` that have a body at all.
+const BODY_SCAN_COMMITS: usize = 30;
 const STAT_FILE_LIMIT: usize = 60;
 const UNTRACKED_LISTED: usize = 50;
 /// Room kept for the note that ends a cut file, and again for the note that lists omitted files.
@@ -37,16 +44,19 @@ pub fn context(repo: &Repo) -> Result<MessageContext, VcsError> {
         return Err(VcsError::NothingToDescribe);
     }
     let (patch, patch_cut) = cap_patch(&patch);
+    let (recent_subjects, recent_bodies) = if has_head {
+        (recent_subjects(repo)?, recent_bodies(repo)?)
+    } else {
+        (Vec::new(), Vec::new())
+    };
     Ok(MessageContext {
         source,
         stat,
         patch,
         truncated: patch_cut || untracked_cut,
-        recent_subjects: if has_head {
-            recent_subjects(repo)?
-        } else {
-            Vec::new()
-        },
+        branch: repo.current_branch()?,
+        recent_subjects,
+        recent_bodies,
     })
 }
 
@@ -71,7 +81,8 @@ fn has_staged(repo: &Repo) -> Result<bool, VcsError> {
     }
 }
 
-fn stat_text(repo: &Repo, base: &[&str]) -> Result<String, VcsError> {
+/// `git diff --stat` for the diff `base` names, as many files as `STAT_FILE_LIMIT`.
+pub fn stat_text(repo: &Repo, base: &[&str]) -> Result<String, VcsError> {
     let width = format!("--stat=120,80,{STAT_FILE_LIMIT}");
     let args = base
         .iter()
@@ -126,6 +137,32 @@ fn recent_subjects(repo: &Repo) -> Result<Vec<String>, VcsError> {
         .split(|byte| *byte == 0)
         .filter(|subject| !subject.is_empty())
         .map(lossy)
+        .collect())
+}
+
+/// Bodies of the newest commits that have one, as a model's example of how this repository
+/// explains its changes.
+fn recent_bodies(repo: &Repo) -> Result<Vec<String>, VcsError> {
+    let scan = BODY_SCAN_COMMITS.to_string();
+    let output = repo
+        .read([
+            "log",
+            "-n",
+            &scan,
+            "-z",
+            "--no-show-signature",
+            "--format=%b",
+        ])
+        .run()?;
+    Ok(output
+        .stdout
+        .split(|byte| *byte == 0)
+        .map(lossy)
+        .filter_map(|body| {
+            let body = body.trim();
+            (!body.is_empty()).then(|| cap_chars(body, RECENT_BODY_LIMIT).to_owned())
+        })
+        .take(RECENT_BODY_COUNT)
         .collect())
 }
 
@@ -191,11 +228,6 @@ fn cut_at_line(text: &str, max: usize) -> (&str, bool) {
     }
     let line_end = text[..end].rfind('\n').map_or(end, |at| at + 1);
     (&text[..line_end], true)
-}
-
-/// Diff output is shown to a model, not applied, so a stray invalid byte becomes U+FFFD.
-fn lossy(bytes: &[u8]) -> String {
-    String::from_utf8_lossy(bytes).into_owned()
 }
 
 #[cfg(test)]

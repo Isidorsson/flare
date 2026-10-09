@@ -32,6 +32,7 @@ mod repo;
 mod staging;
 mod state;
 mod status;
+mod text;
 
 #[cfg(test)]
 mod tests;

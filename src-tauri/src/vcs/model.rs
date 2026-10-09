@@ -93,7 +93,11 @@ pub struct MessageContext {
     pub stat: String,
     pub patch: String,
     pub truncated: bool,
+    /// `None` while HEAD is detached.
+    pub branch: Option<String>,
     pub recent_subjects: Vec<String>,
+    /// Bodies of the newest commits that have one, newest first.
+    pub recent_bodies: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -209,11 +213,15 @@ mod tests {
             stat: String::new(),
             patch: String::new(),
             truncated: false,
+            branch: Some("feat/login".to_owned()),
             recent_subjects: vec!["feat: x".to_owned()],
+            recent_bodies: vec!["Why.".to_owned()],
         };
         let json = serde_json::to_value(context).expect("serializes");
         assert_eq!(json["source"], "staged");
+        assert_eq!(json["branch"], "feat/login");
         assert_eq!(json["recentSubjects"][0], "feat: x");
+        assert_eq!(json["recentBodies"][0], "Why.");
         let diff = serde_json::to_value(FileDiff {
             path: "a".to_owned(),
             original: None,
