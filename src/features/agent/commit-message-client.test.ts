@@ -194,24 +194,6 @@ describe("generateCommitMessage", () => {
     expect(sent[0]).toMatchObject({ patch: "", truncated: true, recentSubjects: [] });
   });
 
-  test("sends no branch and no bodies when the caller has none", async () => {
-    const { generate, bus, sent } = setup();
-    const withoutContext: CommitMessageInput = {
-      stat: input.stat,
-      patch: input.patch,
-      truncated: false,
-      recentSubjects: [],
-      includeBody: true,
-    };
-
-    const pending = generate(withoutContext);
-    await tick();
-    bus.publish(generated("req-1", "fix: x"));
-    await pending;
-
-    expect(sent[0]).toMatchObject({ branch: null, recentBodies: [] });
-  });
-
   test("passes a detached HEAD through as no branch", async () => {
     const { generate, bus, sent } = setup();
 

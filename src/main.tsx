@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import { App } from "@/App";
 import { wireAgentEvents } from "@/features/agent-wiring/wire-agent-events";
 import { generateCommitMessage } from "@/features/agent/commit-message";
+import { generatePullRequest } from "@/features/agent/pr-message";
 import { startGraphRuntime } from "@/features/graph";
 import { configureVcs } from "@/features/vcs";
 import "@/styles/index.css";
@@ -15,7 +16,7 @@ if (!container) {
 
 wireAgentEvents();
 startGraphRuntime();
-configureVcs({ generateMessage: generateCommitMessage });
+configureVcs({ generateMessage: generateCommitMessage, generatePullRequest });
 
 createRoot(container).render(
   <StrictMode>

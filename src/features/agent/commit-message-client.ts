@@ -6,10 +6,10 @@ export interface CommitMessageInput {
   stat: string;
   patch: string;
   truncated: boolean;
-  // Null or absent when HEAD is detached or the branch is not known.
-  branch?: string | null;
+  // Null when HEAD is detached.
+  branch: string | null;
   recentSubjects: string[];
-  recentBodies?: string[];
+  recentBodies: string[];
   includeBody: boolean;
 }
 
@@ -28,9 +28,9 @@ export function createCommitMessageClient(deps: OneShotClientDeps): GenerateComm
         type: "commit.generate",
         requestId,
         ...input,
-        branch: input.branch ?? null,
+        branch: input.branch,
         recentSubjects: input.recentSubjects.slice(0, MAX_COMMIT_RECENT_SUBJECTS),
-        recentBodies: (input.recentBodies ?? []).slice(0, MAX_COMMIT_RECENT_BODIES),
+        recentBodies: input.recentBodies.slice(0, MAX_COMMIT_RECENT_BODIES),
       }),
     interpret: (event, requestId) => {
       if (event.type === "commit.generated" && event.requestId === requestId) {
