@@ -4,15 +4,13 @@ import type { KeyboardEvent } from "react";
 import { ActionButton } from "./ActionButton";
 import { COMMIT_SHORTCUT, SUBJECT_LIMIT, isCommitShortcut } from "./commit-draft";
 import { DescriptionToggle } from "./DescriptionToggle";
+import { FIELD } from "./field-style";
 import { InlineError } from "./InlineError";
 import { useVcs } from "./use-vcs";
 import { commitAndPushBlockedReason, commitBlockedReason, draftOf, generateBlockedReason } from "./vcs-selectors";
 import type { VcsAction } from "./vcs-types";
 
 const COMMIT_ERRORS: readonly VcsAction[] = ["generate", "commit", "commitAndPush"];
-
-const FIELD =
-  "w-full rounded-md border border-border bg-surface-1 px-2 text-xs text-fg outline-none select-text placeholder:text-fg-subtle focus:border-border-strong disabled:opacity-60";
 
 function SubjectField({ onKeyDown }: { onKeyDown: (event: KeyboardEvent) => void }) {
   const subject = useVcs((state) => draftOf(state).subject);

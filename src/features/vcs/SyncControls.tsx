@@ -58,7 +58,7 @@ export function SyncControls({ status }: { status: VcsStatus }) {
   const fetch = useVcs((state) => state.fetch);
   const pull = useVcs((state) => state.pull);
   const push = useVcs((state) => state.push);
-  const refresh = useVcs((state) => state.refresh);
+  const reload = useVcs((state) => state.reload);
   const fetchBlocked = useVcs(actionBlockedReason);
   const pullBlocked = useVcs(pullBlockedReason);
   const pushBlocked = useVcs(pushBlockedReason);
@@ -97,9 +97,9 @@ export function SyncControls({ status }: { status: VcsStatus }) {
       <IconButton
         icon={RotateCw}
         label="Refresh"
-        detail="Reads the git status again, for changes made outside Flare"
+        detail="Reads the git status and the pull request state again, for changes made outside Flare"
         onClick={() => {
-          void refresh();
+          void reload();
         }}
       />
     </div>

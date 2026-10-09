@@ -1,8 +1,9 @@
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import { afterAll, afterEach, describe, expect, mock, test } from "bun:test";
-import { act, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { useStore } from "zustand";
 
+import { buttonLabelled, press, settle, typeInto } from "./dom-test-support";
 import { NOT_A_REPO, createFakeGateway, file, repoStatus, type FakeGateway, type FakeOptions } from "./fake-gateway";
 import { generator } from "./store-test-support";
 import type { VcsState, VcsStore } from "./vcs-store";
@@ -36,20 +37,6 @@ const { ChangesPanel } = await import("./ChangesPanel");
 const ROOT = "C:/work/app";
 const FILES = [file("src/a.ts", null, "modified"), file("notes.md", null, "untracked"), file("src/b.ts", "modified", null)];
 
-function flush(): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(resolve, 0);
-  });
-}
-
-// Runs `change` and lets React and the promises it started finish.
-function settle(change: () => void = () => undefined) {
-  return act(async () => {
-    change();
-    await flush();
-  });
-}
-
 const containers: HTMLElement[] = [];
 afterEach(() => {
   for (const container of containers.splice(0)) container.remove();
@@ -72,36 +59,11 @@ async function mountPanel(options: FakeOptions & { root?: string | null } = {}) 
   return { fake, container, store: current, text: () => container.textContent };
 }
 
-function buttons(scope: ParentNode): HTMLButtonElement[] {
-  return [...scope.querySelectorAll("button")];
-}
-
-function buttonLabelled(scope: ParentNode, label: string): HTMLButtonElement {
-  const found = buttons(scope).find((button) => button.getAttribute("aria-label") === label || button.textContent.trim() === label);
-  if (found === undefined) throw new Error(`no button "${label}"`);
-  return found;
-}
-
 function rowOf(container: HTMLElement, fileName: string, section: string): HTMLElement {
   const list = container.querySelector(`section[aria-label="${section}"]`);
   const row = [...(list?.querySelectorAll("li") ?? [])].find((item) => item.textContent.includes(fileName));
   if (row === undefined) throw new Error(`no row ${fileName} under ${section}`);
   return row;
-}
-
-function press(element: Element) {
-  return settle(() => {
-    element.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
-  });
-}
-
-// Sets the value the way a user's typing would reach React: through the prototype's setter, not the one React watches on the node.
-function typeInto(element: HTMLInputElement | HTMLTextAreaElement, text: string) {
-  const prototype = element instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
-  return settle(() => {
-    Reflect.set(prototype, "value", text, element);
-    element.dispatchEvent(new Event("input", { bubbles: true }));
-  });
 }
 
 function subjectInput(container: HTMLElement): HTMLInputElement {
