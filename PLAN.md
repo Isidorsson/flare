@@ -127,7 +127,23 @@ Stage, commit, branch, pull and push from a **Changes** tab in the right panel (
 - [x] Phase B: protocol + bridge generator + `commit-message.ts`.
 - [x] Phase C: Changes tab UI, generator wired in `main.tsx` via `configureVcs`.
 - [ ] Unverified: live Haiku generation, push/pull against HTTPS/SSH remotes (a credential manager window can block up to the 10 min network timeout), panel layout in the running app.
-- [ ] Later: hunk/line staging, open a PR with `gh`, amend, stash.
+- [ ] Later: hunk/line staging, amend, stash.
+
+#### Pull requests and richer commit context (in progress)
+**Commit context upgrade.** `vcs_message_context` also returns `branch: string | null` and `recentBodies: string[]` (bodies of the last 3 commits that have one, newest first, each trimmed and capped at `RECENT_BODY_LIMIT` chars). `commit.generate` gains the same two fields; the prompt uses the branch name as a hint for type and scope (`feat/login` → `feat(login)`) and the bodies as the style to follow for descriptions.
+
+**Rust** (in `vcs/`, via the `gh` CLI run through `git_cli`-style runner: no shell, `GH_PROMPT_DISABLED=1`, `GH_NO_UPDATE_NOTIFIER=1`, network timeout). Same `{ request: { root, ... } }` shape and `{ code, message }` errors; new codes `gh_missing`, `gh_unauthenticated`, `no_commits` (branch has nothing ahead of base), `on_base_branch`.
+- `vcs_pr_info` → `PrInfo { ghAvailable, authenticated, defaultBase: string | null, current: PullRequest | null }`; `PullRequest { number, url, title, state: "open" | "closed" | "merged", isDraft, base }`. Missing or signed-out `gh` is reported in the fields, never as an error. `current` is the PR whose head is the current branch (`gh pr view --json`), null when none or detached.
+- `vcs_pr_context { base }` → `{ base, branch, commits: { subject, body }[] (oldest first, capped at 50), stat, truncated }`: commits in `base..HEAD` (merge-base against `origin/<base>` when it exists, else local `<base>`) and `git diff --stat` over the same range.
+- `vcs_pr_create { title, body, base, draft }` → `{ pr: PullRequest, status: VcsStatus }`: pushes first when the branch has no upstream or is ahead, then `gh pr create --title <t> --body-file - --base <b> --head <branch>` (`--draft` when asked), body on stdin. Refuses an empty title, a detached HEAD and creating from the base branch itself.
+
+**Bridge**: `pr.generate { requestId, branch, base, commits, stat, truncated }` → `pr.generated { requestId, title, body }` / `pr.failed { requestId, message }`. Same one-shot Haiku generator as commits. Title ≤ 72 chars (Conventional Commits style when the commits use it); body Markdown with `## Summary` (bullets), `## Why`, and `## Test plan` only when tests are touched; no AI attribution. Frontend `generatePullRequest(input): Promise<{ title, body }>` in `src/features/agent/pr-message.ts`.
+
+**UI**: a collapsible "Pull request" section in the Changes tab, below the commit box. Hidden on the default base branch and detached HEAD. If `gh` is missing or signed out it explains the fix (`winget install GitHub.cli`, `gh auth login`). If `current` exists it shows `#N title`, state and Open in browser (`tauri-plugin-opener`). Otherwise: base picker (default `defaultBase`), title, body, Generate (sparkles), Draft toggle, Create PR. Generator injected through `configureVcs({ generateMessage, generatePullRequest })`. Commit generation passes `branch` and `recentBodies` through.
+
+- [ ] Phase D: Rust (context upgrade + `vcs_pr_*`).
+- [ ] Phase E: protocol + bridge (`commit.generate` new fields, `pr.generate`) + `pr-message.ts`.
+- [ ] Phase F: UI (pull request section, pass-through of new commit fields).
 
 ### Next
 - [ ] **6. Polish (original plan).**
