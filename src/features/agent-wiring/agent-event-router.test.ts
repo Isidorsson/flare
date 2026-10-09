@@ -58,6 +58,15 @@ describe("file changes", () => {
 
 });
 
+describe("commit messages", () => {
+  test("are not agent activity and reach no sink", () => {
+    const { route, changes, reads, editing, calls } = setup();
+    route({ type: "commit.generated", requestId: "c1", subject: "fix: x", body: null });
+    route({ type: "commit.failed", requestId: "c2", message: "nope" });
+    expect([changes, reads, editing, calls]).toEqual([[], [], [], []]);
+  });
+});
+
 describe("turns", () => {
   test("starts a new turn with each turn.started and tells the files panel", () => {
     const { route, changes, calls } = setup();

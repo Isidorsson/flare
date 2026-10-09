@@ -71,6 +71,11 @@ export class AgentController {
     this.#track(liveId, this.#send({ type: "interrupt" }));
   }
 
+  async sendStandalone(message: AppMessage): Promise<void> {
+    await this.#connect();
+    await this.#send(message);
+  }
+
   newThread(): void {
     this.#store.set(() => ({ activeThreadId: null }));
   }
@@ -187,6 +192,8 @@ export class AgentController {
   }
 
   #ingest(event: BridgeEvent): void {
+    // Answers to standalone requests belong to no thread; their requester listens on the event bus.
+    if (event.type === "commit.generated" || event.type === "commit.failed") return;
     if (event.type === "session.outputStyles") {
       this.#store.set((state) => ({ outputStyles: mergeOutputStyles(state.outputStyles, event.available) }));
       return;
