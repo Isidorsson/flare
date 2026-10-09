@@ -1,4 +1,6 @@
-use crate::vcs::message_context::{MESSAGE_FILE_PATCH_LIMIT, MESSAGE_PATCH_LIMIT};
+use crate::vcs::message_context::{
+    MESSAGE_FILE_PATCH_LIMIT, MESSAGE_PATCH_LIMIT, RECENT_BODY_LIMIT,
+};
 use crate::vcs::model::DiffSource;
 
 use super::support::{error_code, Fixture};
@@ -164,4 +166,136 @@ fn a_very_long_list_of_untracked_files_is_cut_and_marked() {
     let context = fixture.message_context().expect("context");
     assert!(context.truncated);
     assert!(context.stat.contains("... and 30 more"));
+}
+
+#[test]
+fn the_context_names_the_current_branch() {
+    let fixture = Fixture::repo();
+    fixture.write(
+        "a.txt", "a2
+",
+    );
+    assert_eq!(
+        fixture
+            .message_context()
+            .expect("context")
+            .branch
+            .as_deref(),
+        Some("main")
+    );
+    fixture.create_branch("feat/login").expect("create");
+    assert_eq!(
+        fixture
+            .message_context()
+            .expect("context")
+            .branch
+            .as_deref(),
+        Some("feat/login")
+    );
+}
+
+#[test]
+fn a_detached_head_has_no_branch_name() {
+    let fixture = Fixture::repo();
+    fixture.git(&["checkout", "--quiet", "--detach"]);
+    fixture.write(
+        "a.txt", "a2
+",
+    );
+    assert_eq!(fixture.message_context().expect("context").branch, None);
+}
+
+#[test]
+fn a_branch_with_no_commits_yet_is_still_named() {
+    let fixture = Fixture::unborn();
+    fixture.write(
+        "first.txt",
+        "one
+",
+    );
+    let context = fixture.message_context().expect("context");
+    assert_eq!(context.branch.as_deref(), Some("main"));
+    assert!(context.recent_bodies.is_empty());
+}
+
+#[test]
+fn recent_bodies_are_the_newest_three_that_have_one_trimmed_and_newest_first() {
+    let fixture = Fixture::repo();
+    fixture.commit_with_body("feat: one", "Body one.");
+    fixture.commit_with_body(
+        "feat: two",
+        "Body two, first paragraph.
+
+Second paragraph.",
+    );
+    fixture.git(&["commit", "--quiet", "--allow-empty", "-m", "chore: no body"]);
+    fixture.commit_with_body("feat: three", "Body three.");
+    fixture.commit_with_body("feat: four", "Body four.");
+    fixture.write(
+        "a.txt", "a2
+",
+    );
+
+    let context = fixture.message_context().expect("context");
+    assert_eq!(
+        context.recent_bodies,
+        [
+            "Body four.",
+            "Body three.",
+            "Body two, first paragraph.
+
+Second paragraph."
+        ]
+    );
+}
+
+#[test]
+fn history_without_any_body_gives_no_bodies() {
+    let fixture = Fixture::repo();
+    fixture.write(
+        "a.txt", "a2
+",
+    );
+    let context = fixture.message_context().expect("context");
+    assert!(context.recent_bodies.is_empty());
+    assert_eq!(context.recent_subjects, ["initial"]);
+}
+
+#[test]
+fn a_long_body_is_cut_to_the_limit_in_characters() {
+    let fixture = Fixture::repo();
+    fixture.commit_with_body("feat: long", &"é".repeat(RECENT_BODY_LIMIT * 3));
+    fixture.write(
+        "a.txt", "a2
+",
+    );
+    let context = fixture.message_context().expect("context");
+    assert_eq!(context.recent_bodies.len(), 1);
+    assert_eq!(context.recent_bodies[0].chars().count(), RECENT_BODY_LIMIT);
+}
+
+#[test]
+fn bodies_in_any_script_are_kept() {
+    let fixture = Fixture::repo();
+    fixture.commit_with_body("fix: text", "日本語 and Zażółć gęślą jaźń.");
+    fixture.write(
+        "a.txt", "a2
+",
+    );
+    let context = fixture.message_context().expect("context");
+    assert_eq!(context.recent_bodies, ["日本語 and Zażółć gęślą jaźń."]);
+}
+
+#[test]
+fn only_the_latest_thirty_commits_are_searched_for_bodies() {
+    let fixture = Fixture::repo();
+    fixture.commit_with_body("feat: far back", "Too old to be found.");
+    let filler: Vec<String> = (0..30).map(|n| format!("chore: filler {n}")).collect();
+    fixture.commit_empty(&filler);
+    fixture.write(
+        "a.txt", "a2
+",
+    );
+    let context = fixture.message_context().expect("context");
+    assert!(context.recent_bodies.is_empty());
 }

@@ -60,6 +60,9 @@ pub fn run() {
             vcs::commands::vcs_pull,
             vcs::commands::vcs_push,
             vcs::commands::vcs_message_context,
+            vcs::commands::vcs_pr_info,
+            vcs::commands::vcs_pr_context,
+            vcs::commands::vcs_pr_create,
         ])
         .setup(|app| {
             graph::watch::spawn(app.handle().clone());

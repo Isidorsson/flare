@@ -1,7 +1,11 @@
 mod branches;
 mod commit;
 mod diff;
+mod fake_gh;
 mod message_context;
+mod pr_context;
+mod pr_create;
+mod pr_info;
 mod remote;
 mod staging;
 mod status;

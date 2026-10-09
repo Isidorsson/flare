@@ -12,9 +12,9 @@ pub enum VcsError {
     GitMissing(String),
     #[error("git {command} failed: {stderr}")]
     Git { command: String, stderr: String },
-    #[error("git {command} did not finish in {seconds} seconds and was stopped")]
+    #[error("{command} did not finish in {seconds} seconds and was stopped")]
     Timeout { command: String, seconds: u64 },
-    #[error("unexpected output from git {command}: {detail}")]
+    #[error("unexpected output from {command}: {detail}")]
     Output { command: String, detail: String },
     #[error("invalid request: {0}")]
     InvalidRequest(String),
@@ -32,6 +32,16 @@ pub enum VcsError {
     DetachedHead,
     #[error("{0}")]
     NoRemote(String),
+    #[error("pull requests need the GitHub CLI (gh): install it with `winget install GitHub.cli` and make sure it is on your PATH")]
+    GhMissing,
+    #[error("the GitHub CLI is not signed in: run `gh auth login` in a terminal")]
+    GhUnauthenticated,
+    #[error("gh {command} failed: {stderr}")]
+    Gh { command: String, stderr: String },
+    #[error("this branch has no commits ahead of {0}")]
+    NoCommits(String),
+    #[error("{0} is the base branch: switch to a feature branch first")]
+    OnBaseBranch(String),
     #[error("branch {0} has no upstream: push it first")]
     NoUpstream(String),
     #[error("{path}: {source}")]
@@ -52,9 +62,10 @@ impl VcsError {
         }
     }
 
+    /// Output git gave that could not be understood; `command` is the git subcommand.
     pub fn output(command: &str, detail: impl Into<String>) -> Self {
         Self::Output {
-            command: command.to_owned(),
+            command: format!("git {command}"),
             detail: detail.into(),
         }
     }
@@ -74,6 +85,11 @@ impl VcsError {
             Self::DetachedHead => "detached_head",
             Self::NoRemote(_) => "no_remote",
             Self::NoUpstream(_) => "no_upstream",
+            Self::GhMissing => "gh_missing",
+            Self::GhUnauthenticated => "gh_unauthenticated",
+            Self::Gh { .. } => "gh",
+            Self::NoCommits(_) => "no_commits",
+            Self::OnBaseBranch(_) => "on_base_branch",
             Self::Io { .. } => "io",
             Self::Task(_) => "task",
         }
@@ -85,8 +101,14 @@ impl From<GitError> for VcsError {
         match error {
             GitError::Missing(program) => Self::GitMissing(program),
             GitError::Failed { command, stderr } => Self::Git { command, stderr },
-            GitError::Timeout { command, seconds } => Self::Timeout { command, seconds },
-            GitError::Output { command, detail } => Self::Output { command, detail },
+            GitError::Timeout { command, seconds } => Self::Timeout {
+                command: format!("git {command}"),
+                seconds,
+            },
+            GitError::Output { command, detail } => Self::Output {
+                command: format!("git {command}"),
+                detail,
+            },
             GitError::Io { path, source } => Self::Io { path, source },
             GitError::Task(message) => Self::Task(message),
         }
@@ -133,5 +155,34 @@ mod tests {
             seconds: 600,
         });
         assert_eq!(timeout.code(), "timeout");
+        assert_eq!(
+            timeout.to_string(),
+            "git fetch did not finish in 600 seconds and was stopped"
+        );
+    }
+
+    #[test]
+    fn pull_request_errors_have_their_contract_codes() {
+        let codes = [
+            (VcsError::GhMissing, "gh_missing"),
+            (VcsError::GhUnauthenticated, "gh_unauthenticated"),
+            (VcsError::NoCommits("main".to_owned()), "no_commits"),
+            (VcsError::OnBaseBranch("main".to_owned()), "on_base_branch"),
+            (
+                VcsError::Gh {
+                    command: "pr create".to_owned(),
+                    stderr: "boom".to_owned(),
+                },
+                "gh",
+            ),
+        ];
+        for (error, code) in codes {
+            assert_eq!(error.code(), code);
+        }
+        let failed = VcsError::Gh {
+            command: "pr create".to_owned(),
+            stderr: "boom".to_owned(),
+        };
+        assert_eq!(failed.to_string(), "gh pr create failed: boom");
     }
 }

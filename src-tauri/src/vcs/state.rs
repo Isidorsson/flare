@@ -2,20 +2,26 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, PoisonError};
 
+use crate::git_cli::Git;
+
 use super::error::VcsError;
 use super::model::{
     BranchRequest, CommitRequest, CommitResult, DeleteBranchRequest, FileDiff, FileDiffRequest,
-    MessageContext, PathsRequest, RootRequest, VcsBranch, VcsStatus,
+    MessageContext, PathsRequest, PrContext, PrContextRequest, PrCreateRequest, PrCreated, PrInfo,
+    RootRequest, VcsBranch, VcsStatus,
 };
 use super::repo::Repo;
-use super::{branches, commit, diff, message_context, paths, remote, staging, status};
+use super::{
+    branches, commit, diff, message_context, paths, pr_context, pr_create, pr_info, remote,
+    staging, status,
+};
 
 type RepoLocks = Mutex<HashMap<PathBuf, Arc<Mutex<()>>>>;
 
 /// Tauri-managed state. Git takes `index.lock` for anything that writes the index, so two clicks
 /// in quick succession would make the second fail with "Unable to create index.lock". Commands
 /// that change the index, the working tree or HEAD therefore queue per repository instead.
-/// Reads never wait, and neither do fetch and push, which touch neither.
+/// Reads never wait, and neither do fetch and a plain push, which touch neither.
 #[derive(Clone, Default)]
 pub struct VcsState {
     locks: Arc<RepoLocks>,
@@ -95,6 +101,38 @@ impl VcsState {
 
     pub fn message_context(&self, request: RootRequest) -> Result<MessageContext, VcsError> {
         message_context::context(&Repo::open(&request.root)?)
+    }
+
+    pub fn pr_info(&self, request: RootRequest) -> Result<PrInfo, VcsError> {
+        let repo = Repo::open(&request.root)?;
+        pr_info::read(&repo, &Git::gh(repo.top()))
+    }
+
+    pub fn pr_context(&self, request: PrContextRequest) -> Result<PrContext, VcsError> {
+        pr_context::read(&Repo::open(&request.root)?, &request.base)
+    }
+
+    pub fn pr_create(&self, request: PrCreateRequest) -> Result<PrCreated, VcsError> {
+        let repo = Repo::open(&request.root)?;
+        self.create_pull_request(&repo, &Git::gh(repo.top()), &request)
+    }
+
+    /// Takes the `gh` runner as an argument so tests can stand in for GitHub.
+    pub(super) fn create_pull_request(
+        &self,
+        repo: &Repo,
+        gh: &Git,
+        request: &PrCreateRequest,
+    ) -> Result<PrCreated, VcsError> {
+        let plan = pr_create::prepare(repo, gh, request)?;
+        if plan.needs_push {
+            self.exclusive(repo, || remote::push(repo))?;
+        }
+        let pr = pr_create::submit(gh, request, &plan.branch)?;
+        Ok(PrCreated {
+            pr,
+            status: status::read(repo)?,
+        })
     }
 
     /// Runs `work` with the repository to itself, then reports how it looks afterwards.
