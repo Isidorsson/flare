@@ -7,6 +7,10 @@ import {
   commitResultSchema,
   fileDiffSchema,
   messageContextSchema,
+  prContextSchema,
+  prCreateResultSchema,
+  prInfoSchema,
+  pullRequestSchema,
   toVcsError,
   vcsBranchSchema,
   vcsFileSchema,
@@ -132,16 +136,136 @@ describe("branches", () => {
 });
 
 describe("messageContextSchema", () => {
-  const context = { source: "staged", stat: " a | 1 +", patch: "diff", truncated: false, recentSubjects: ["fix: a"] };
+  const context = {
+    source: "staged",
+    stat: " a | 1 +",
+    patch: "diff",
+    truncated: false,
+    recentSubjects: ["fix: a"],
+    branch: "feat/login",
+    recentBodies: ["Why it was needed."],
+  };
 
   test("accepts the staged and the all-changes source", () => {
     expect(messageContextSchema.parse(context).source).toBe("staged");
     expect(messageContextSchema.parse({ ...context, source: "all", recentSubjects: [] }).source).toBe("all");
   });
 
-  test("rejects an unknown source and a missing truncated flag", () => {
+  test("carries the branch name and the recent bodies", () => {
+    const parsed = messageContextSchema.parse(context);
+    expect(parsed.branch).toBe("feat/login");
+    expect(parsed.recentBodies).toEqual(["Why it was needed."]);
+  });
+
+  test("a detached HEAD has no branch, and no recent body is an empty list", () => {
+    const parsed = messageContextSchema.parse({ ...context, branch: null, recentBodies: [] });
+    expect(parsed.branch).toBeNull();
+    expect(parsed.recentBodies).toEqual([]);
+  });
+
+  test("rejects an unknown source, a missing truncated flag and a context without the new fields", () => {
     expect(messageContextSchema.safeParse({ ...context, source: "working" }).success).toBe(false);
     expect(messageContextSchema.safeParse({ ...context, truncated: undefined }).success).toBe(false);
+    expect(messageContextSchema.safeParse({ ...context, branch: undefined }).success).toBe(false);
+    expect(messageContextSchema.safeParse({ ...context, recentBodies: undefined }).success).toBe(false);
+    expect(messageContextSchema.safeParse({ ...context, branch: "" }).success).toBe(false);
+  });
+});
+
+const PULL_REQUEST = {
+  number: 12,
+  url: "https://github.com/acme/app/pull/12",
+  title: "feat(auth): add login",
+  state: "open",
+  isDraft: false,
+  base: "main",
+};
+
+describe("pullRequestSchema", () => {
+  test("accepts what the pull request commands return", () => {
+    expect(pullRequestSchema.parse(PULL_REQUEST)).toMatchObject(PULL_REQUEST);
+    for (const state of ["open", "closed", "merged"]) {
+      expect(pullRequestSchema.safeParse({ ...PULL_REQUEST, state }).success).toBe(true);
+    }
+  });
+
+  test("rejects an unknown state, a number that is not positive and a missing draft flag", () => {
+    expect(pullRequestSchema.safeParse({ ...PULL_REQUEST, state: "OPEN" }).success).toBe(false);
+    expect(pullRequestSchema.safeParse({ ...PULL_REQUEST, number: 0 }).success).toBe(false);
+    expect(pullRequestSchema.safeParse({ ...PULL_REQUEST, isDraft: undefined }).success).toBe(false);
+    expect(pullRequestSchema.safeParse({ ...PULL_REQUEST, base: "" }).success).toBe(false);
+  });
+
+  test("only a web address can be opened in the browser", () => {
+    expect(pullRequestSchema.safeParse({ ...PULL_REQUEST, url: "http://ghe.local/acme/app/pull/12" }).success).toBe(true);
+    expect(pullRequestSchema.safeParse({ ...PULL_REQUEST, url: "file:///C:/Windows/System32/calc.exe" }).success).toBe(false);
+    expect(pullRequestSchema.safeParse({ ...PULL_REQUEST, url: "javascript:alert(1)" }).success).toBe(false);
+    expect(pullRequestSchema.safeParse({ ...PULL_REQUEST, url: "not a url" }).success).toBe(false);
+  });
+});
+
+describe("prInfoSchema", () => {
+  const info = { ghAvailable: true, authenticated: true, defaultBase: "main", current: PULL_REQUEST };
+
+  test("accepts a branch with a pull request and one without", () => {
+    expect(prInfoSchema.parse(info).current?.number).toBe(12);
+    expect(prInfoSchema.parse({ ...info, current: null }).current).toBeNull();
+  });
+
+  test("a missing or signed-out gh is reported in the fields, with no default base", () => {
+    const missing = prInfoSchema.parse({ ghAvailable: false, authenticated: false, defaultBase: null, current: null });
+    expect(missing.ghAvailable).toBe(false);
+    const signedOut = prInfoSchema.parse({ ghAvailable: true, authenticated: false, defaultBase: null, current: null });
+    expect(signedOut.authenticated).toBe(false);
+  });
+
+  test("rejects snake_case names and missing fields", () => {
+    const { ghAvailable, ...rest } = info;
+    expect(prInfoSchema.safeParse({ ...rest, gh_available: ghAvailable }).success).toBe(false);
+    expect(prInfoSchema.safeParse({ ...info, current: undefined }).success).toBe(false);
+    expect(prInfoSchema.safeParse({ ...info, defaultBase: "" }).success).toBe(false);
+  });
+});
+
+describe("prContextSchema", () => {
+  const context = {
+    base: "main",
+    branch: "feat/login",
+    commits: [
+      { subject: "feat: form", body: "" },
+      { subject: "fix: trim", body: "Pasted text has spaces." },
+    ],
+    stat: " a | 1 +",
+    truncated: false,
+  };
+
+  test("accepts commits with and without a body, oldest first", () => {
+    const parsed = prContextSchema.parse(context);
+    expect(parsed.commits.map((commit) => commit.subject)).toEqual(["feat: form", "fix: trim"]);
+    expect(parsed.commits[0]?.body).toBe("");
+  });
+
+  test("accepts a branch with nothing ahead of its base", () => {
+    expect(prContextSchema.parse({ ...context, commits: [] }).commits).toEqual([]);
+  });
+
+  test("rejects a commit without a body field and a missing base", () => {
+    expect(prContextSchema.safeParse({ ...context, commits: [{ subject: "feat: form" }] }).success).toBe(false);
+    expect(prContextSchema.safeParse({ ...context, base: undefined }).success).toBe(false);
+    expect(prContextSchema.safeParse({ ...context, truncated: undefined }).success).toBe(false);
+  });
+});
+
+describe("prCreateResultSchema", () => {
+  test("carries the pull request and the fresh status", () => {
+    const parsed = prCreateResultSchema.parse({ pr: PULL_REQUEST, status: STATUS });
+    expect(parsed.pr.number).toBe(12);
+    expect(parsed.status.branch).toBe("main");
+  });
+
+  test("rejects a result without the status or with a pull request that is not one", () => {
+    expect(prCreateResultSchema.safeParse({ pr: PULL_REQUEST }).success).toBe(false);
+    expect(prCreateResultSchema.safeParse({ pr: { number: 1 }, status: STATUS }).success).toBe(false);
   });
 });
 

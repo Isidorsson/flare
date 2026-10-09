@@ -1,6 +1,10 @@
 import { branchNameProblem } from "./branch-model";
 import { reconcileSelection } from "./change-groups";
 import { buildCommitMessage, EMPTY_DRAFT } from "./commit-draft";
+import { withError, withoutError } from "./error-state";
+import { INITIAL_PR } from "./pr-model";
+import { PrController } from "./pr-controller";
+import { createPrBlockedReason } from "./pr-selectors";
 import { describeVcsError } from "./vcs-errors";
 import type { VcsGateway } from "./vcs-gateway";
 import type { FileDiff, VcsStatus } from "./vcs-schemas";
@@ -19,14 +23,11 @@ import type {
   DiffState,
   FileSelection,
   MutatingAction,
+  PullRequestGenerator,
+  StoreAccess,
   VcsAction,
   VcsSnapshot,
 } from "./vcs-types";
-
-export interface StoreAccess {
-  get(): VcsSnapshot;
-  set(update: (state: VcsSnapshot) => Partial<VcsSnapshot>): void;
-}
 
 export interface VcsDeps {
   gateway: VcsGateway;
@@ -45,6 +46,11 @@ export const INITIAL_SNAPSHOT: VcsSnapshot = {
   busy: null,
   generating: false,
   canGenerate: false,
+  pr: INITIAL_PR,
+  prDrafts: {},
+  prExpanded: false,
+  generatingPr: false,
+  canGeneratePr: false,
   errors: {},
 };
 
@@ -56,6 +62,8 @@ const ROOT_SCOPED: Partial<VcsSnapshot> = {
   diff: IDLE_DIFF,
   busy: null,
   generating: false,
+  pr: INITIAL_PR,
+  generatingPr: false,
   errors: {},
 };
 
@@ -74,11 +82,8 @@ const GUARDS: Record<MutatingAction, Guard> = {
   switchBranch: actionBlockedReason,
   createBranch: actionBlockedReason,
   deleteBranch: actionBlockedReason,
+  createPr: createPrBlockedReason,
 };
-
-function withoutError(errors: VcsSnapshot["errors"], action: VcsAction): VcsSnapshot["errors"] {
-  return Object.fromEntries(Object.entries(errors).filter(([name]) => name !== action));
-}
 
 function sameDiff(a: FileDiff, b: FileDiff): boolean {
   return a.path === b.path && a.binary === b.binary && a.original === b.original && a.modified === b.modified;
@@ -92,6 +97,7 @@ function sameDiff(a: FileDiff, b: FileDiff): boolean {
 export class VcsController {
   readonly #gateway: VcsGateway;
   readonly #store: StoreAccess;
+  readonly #pr: PrController;
   #generate: CommitMessageGenerator | null = null;
   #epoch = 0;
   #statusTicket = 0;
@@ -102,6 +108,13 @@ export class VcsController {
   constructor(deps: VcsDeps, store: StoreAccess) {
     this.#gateway = deps.gateway;
     this.#store = store;
+    this.#pr = new PrController(
+      {
+        gateway: deps.gateway,
+        host: { mutate: (action, run) => this.#mutate(action, run), loadBranches: () => this.loadBranches() },
+      },
+      store,
+    );
   }
 
   configure(generate: CommitMessageGenerator): void {
@@ -109,8 +122,13 @@ export class VcsController {
     this.#store.set(() => ({ canGenerate: true }));
   }
 
+  configurePullRequest(generate: PullRequestGenerator): void {
+    this.#pr.configure(generate);
+  }
+
   setRoot(root: string | null): Promise<void> {
     if (this.#store.get().root === root) return Promise.resolve();
+    this.#pr.reset();
     this.#epoch += 1;
     this.#statusTicket += 1;
     this.#diffTicket += 1;
@@ -131,6 +149,12 @@ export class VcsController {
     } catch (error) {
       if (epoch === this.#epoch && ticket === this.#statusTicket) this.#fail("refresh", error);
     }
+  }
+
+  /** Refresh for a person asking: the git status and what GitHub says, which plain refreshes leave alone. */
+  async reload(): Promise<void> {
+    await this.refresh();
+    await this.#pr.loadInfo();
   }
 
   selectFile(selection: FileSelection | null): Promise<void> {
@@ -177,7 +201,8 @@ export class VcsController {
   }
 
   async push(): Promise<void> {
-    await this.#mutate("push", (root) => this.#gateway.push({ root }));
+    const pushed = await this.#mutate("push", (root) => this.#gateway.push({ root }));
+    if (pushed) await this.#pr.loadInfo();
   }
 
   async commit(): Promise<void> {
@@ -185,7 +210,7 @@ export class VcsController {
   }
 
   async commitAndPush(): Promise<void> {
-    await this.#mutate("commitAndPush", async (root) => {
+    const pushed = await this.#mutate("commitAndPush", async (root) => {
       await this.#commitTo(root);
       try {
         return await this.#gateway.push({ root });
@@ -193,6 +218,7 @@ export class VcsController {
         throw new Error(`Committed, but pushing failed: ${describeVcsError(error)}`, { cause: error });
       }
     });
+    if (pushed) await this.#pr.loadInfo();
   }
 
   async loadBranches(): Promise<void> {
@@ -248,6 +274,8 @@ export class VcsController {
         patch: context.patch,
         truncated: context.truncated,
         recentSubjects: context.recentSubjects,
+        recentBodies: context.recentBodies,
+        branch: context.branch,
         includeBody,
       });
       if (epoch !== this.#epoch) return;
@@ -269,6 +297,38 @@ export class VcsController {
 
   setIncludeBody(includeBody: boolean): void {
     this.#patchCurrentDraft({ includeBody });
+  }
+
+  loadPrInfo(): Promise<void> {
+    return this.#pr.loadInfo();
+  }
+
+  setPrExpanded(expanded: boolean): Promise<void> {
+    return this.#pr.setExpanded(expanded);
+  }
+
+  generatePr(): Promise<void> {
+    return this.#pr.generate();
+  }
+
+  createPr(): Promise<void> {
+    return this.#pr.create();
+  }
+
+  setPrBase(base: string): void {
+    this.#pr.setBase(base);
+  }
+
+  setPrTitle(title: string): void {
+    this.#pr.setTitle(title);
+  }
+
+  setPrBody(body: string): void {
+    this.#pr.setBody(body);
+  }
+
+  setPrDraft(isDraft: boolean): void {
+    this.#pr.setDraft(isDraft);
   }
 
   dismissError(action: VcsAction): void {
@@ -313,6 +373,7 @@ export class VcsController {
       ...(selection === null ? { diff: IDLE_DIFF } : {}),
     }));
     if (selection !== null) void this.#fetchDiff(selection);
+    this.#pr.statusApplied(status);
   }
 
   async #fetchDiff(selection: FileSelection): Promise<void> {
@@ -351,6 +412,6 @@ export class VcsController {
 
   #fail(action: VcsAction, error: unknown): void {
     const message = describeVcsError(error);
-    this.#store.set((state) => ({ errors: { ...state.errors, [action]: message } }));
+    this.#store.set((state) => ({ errors: withError(state.errors, action, message) }));
   }
 }

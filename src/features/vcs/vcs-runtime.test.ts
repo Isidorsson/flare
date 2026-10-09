@@ -128,6 +128,19 @@ describe("startVcsRuntime", () => {
     expect(calls).toEqual(["status", "status"]);
   });
 
+  test("gh is asked once for a folder and never again by file changes or window focus", async () => {
+    const { ghCalls, fileChanged, windowFocused, timers, settle } = setup("C:/p");
+    await settle();
+    expect(ghCalls).toEqual(["prInfo"]);
+    fileChanged();
+    timers.advance(REFRESH_QUIET_MS);
+    await settle();
+    windowFocused();
+    timers.advance(REFRESH_QUIET_MS);
+    await settle();
+    expect(ghCalls).toEqual(["prInfo"]);
+  });
+
   test("regaining window focus reads the status, which is how git run in a terminal shows up", async () => {
     const { calls, windowFocused, timers, settle } = setup("C:/p");
     await settle();

@@ -64,7 +64,43 @@ export const messageContextSchema = z.object({
   patch: z.string(),
   truncated: z.boolean(),
   recentSubjects: z.array(z.string()),
+  // Null while HEAD is detached.
+  branch: z.string().min(1).nullable(),
+  // Bodies of the latest commits that have one, newest first: the style to follow for a description.
+  recentBodies: z.array(z.string()),
 });
+
+export const pullRequestSchema = z.object({
+  number: z.number().int().positive(),
+  // Opened in the browser, so only web addresses are accepted.
+  url: z.url({ protocol: /^https?$/ }),
+  title: z.string(),
+  state: z.enum(["open", "closed", "merged"]),
+  isDraft: z.boolean(),
+  base: z.string().min(1),
+});
+
+// A missing or signed-out `gh` is reported here, never as an error.
+export const prInfoSchema = z.object({
+  ghAvailable: z.boolean(),
+  authenticated: z.boolean(),
+  defaultBase: z.string().min(1).nullable(),
+  // The pull request whose head is the current branch; null when there is none or HEAD is detached.
+  current: pullRequestSchema.nullable(),
+});
+
+export const prCommitSchema = z.object({ subject: z.string(), body: z.string() });
+
+export const prContextSchema = z.object({
+  base: z.string().min(1),
+  branch: z.string().min(1),
+  // Oldest first.
+  commits: z.array(prCommitSchema),
+  stat: z.string(),
+  truncated: z.boolean(),
+});
+
+export const prCreateResultSchema = z.object({ pr: pullRequestSchema, status: vcsStatusSchema });
 
 export type Change = z.infer<typeof changeSchema>;
 export type VcsFile = z.infer<typeof vcsFileSchema>;
@@ -73,6 +109,11 @@ export type FileDiff = z.infer<typeof fileDiffSchema>;
 export type CommitResult = z.infer<typeof commitResultSchema>;
 export type VcsBranch = z.infer<typeof vcsBranchSchema>;
 export type MessageContext = z.infer<typeof messageContextSchema>;
+export type PullRequest = z.infer<typeof pullRequestSchema>;
+export type PrInfo = z.infer<typeof prInfoSchema>;
+export type PrCommit = z.infer<typeof prCommitSchema>;
+export type PrContext = z.infer<typeof prContextSchema>;
+export type PrCreateResult = z.infer<typeof prCreateResultSchema>;
 
 const errorPayloadSchema = z.object({ code: z.string(), message: z.string() });
 

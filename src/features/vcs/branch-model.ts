@@ -63,3 +63,21 @@ export function branchNameProblem(name: string, branches: readonly VcsBranch[]):
 export function switchTargetLabel(branch: VcsBranch): string {
   return branch.remote ? `Create a local branch that tracks ${branch.name} and switch to it` : "Switch to this branch";
 }
+
+/**
+ * The names a pull request can merge into: every local branch and every remote one without its remote
+ * prefix, except `current`. `preferred` come first, in order (the default branch, then the one picked).
+ */
+export function baseBranchNames(
+  branches: readonly VcsBranch[],
+  current: string | null,
+  preferred: readonly (string | null)[],
+): string[] {
+  const others = branches
+    .filter((branch) => !(branch.remote && branch.name.endsWith("/HEAD")))
+    .map((branch) => (branch.remote ? remoteBaseName(branch.name) : branch.name))
+    .sort((a, b) => a.localeCompare(b));
+  const names = new Set([...preferred.filter((name) => name !== null), ...others]);
+  if (current !== null) names.delete(current);
+  return [...names];
+}

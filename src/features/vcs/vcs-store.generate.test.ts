@@ -30,6 +30,8 @@ describe("generating a message", () => {
         patch: "diff --git a/src/a.ts b/src/a.ts\n-old\n+new",
         truncated: false,
         recentSubjects: ["feat(files): open diffs"],
+        recentBodies: ["Reviewing a change needs the two versions side by side."],
+        branch: "main",
         includeBody: false,
       },
     ]);

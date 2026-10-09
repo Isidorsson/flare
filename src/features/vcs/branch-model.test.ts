@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { branchNameProblem, groupBranches, switchTargetLabel } from "./branch-model";
+import { baseBranchNames, branchNameProblem, groupBranches, switchTargetLabel } from "./branch-model";
 import { DEFAULT_BRANCHES } from "./fake-gateway";
 import type { VcsBranch } from "./vcs-schemas";
 
@@ -61,5 +61,27 @@ describe("switchTargetLabel", () => {
   test("says a remote branch gets a tracking local branch", () => {
     expect(switchTargetLabel(branch("origin/x", true))).toContain("tracks origin/x");
     expect(switchTargetLabel(branch("x"))).toBe("Switch to this branch");
+  });
+});
+
+describe("baseBranchNames", () => {
+  test("lists local and remote branches by plain name, once each, without the current branch", () => {
+    expect(baseBranchNames(DEFAULT_BRANCHES, "dev", [])).toEqual(["feature", "main"]);
+  });
+
+  test("puts the preferred names first and keeps a picked name that is not in the list", () => {
+    expect(baseBranchNames(DEFAULT_BRANCHES, "dev", ["main", "release/1.0"])).toEqual(["main", "release/1.0", "feature"]);
+  });
+
+  test("ignores a missing preferred name and the remote HEAD pointer", () => {
+    expect(baseBranchNames([branch("main"), branch("origin/HEAD", true)], null, [null])).toEqual(["main"]);
+  });
+
+  test("never offers the current branch, even as a preferred name", () => {
+    expect(baseBranchNames(DEFAULT_BRANCHES, "main", ["main"])).toEqual(["dev", "feature"]);
+  });
+
+  test("strips only the remote name, so a branch with slashes survives", () => {
+    expect(baseBranchNames([branch("origin/release/1.0", true)], null, [])).toEqual(["release/1.0"]);
   });
 });
