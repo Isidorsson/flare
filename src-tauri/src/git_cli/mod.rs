@@ -1,10 +1,11 @@
-//! Runs the `git` executable directly (no shell, nothing interpolated into a command line).
+//! Runs the `git` executable directly (no shell, nothing interpolated into a command line). Shared
+//! by `checkpoints` and `vcs`.
 //!
-//! Every command is short-lived and bounded by a timeout, so it is not adopted into a
-//! `proctree::ProcessTree`: a job object exists to take down long-lived trees (shells, the bridge)
-//! when Flare dies, but git only writes immutable objects and files in a scratch index, so a git
-//! that outlives Flare by a few seconds corrupts nothing, and adopting a pid right after spawn
-//! races with commands that exit at once.
+//! Every command is bounded by a timeout (`DEFAULT_TIMEOUT`, or whatever the caller sets for a slow
+//! one such as a push), so it is not adopted into a `proctree::ProcessTree`: a job object exists to
+//! take down long-lived trees (shells, the bridge) when Flare dies, but git protects its own data
+//! with lock files and atomic renames, so a git that outlives Flare by a few seconds corrupts
+//! nothing, and adopting a pid right after spawn races with commands that exit at once.
 
 use std::ffi::{OsStr, OsString};
 use std::io::{self, Read, Write};
@@ -13,10 +14,12 @@ use std::process::{Child, ChildStdin, Command, Stdio};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
-use super::error::CheckpointError;
+mod error;
+
+pub use error::GitError;
 
 const GIT_PROGRAM: &str = "git";
-const COMMAND_TIMEOUT: Duration = Duration::from_secs(120);
+pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(120);
 const POLL_FIRST: Duration = Duration::from_millis(1);
 const POLL_MAX: Duration = Duration::from_millis(20);
 const STDERR_LIMIT: usize = 2_000;
@@ -88,6 +91,7 @@ impl Git {
                 .collect(),
             envs: Vec::new(),
             stdin: None,
+            timeout: DEFAULT_TIMEOUT,
         }
     }
 }
@@ -98,6 +102,7 @@ pub struct Invocation<'a> {
     args: Vec<OsString>,
     envs: Vec<(OsString, OsString)>,
     stdin: Option<Vec<u8>>,
+    timeout: Duration,
 }
 
 #[derive(Debug)]
@@ -120,7 +125,7 @@ impl Invocation<'_> {
     }
 
     /// Runs the command and fails unless it exits with status 0.
-    pub fn run(self) -> Result<Output, CheckpointError> {
+    pub fn run(self) -> Result<Output, GitError> {
         let output = self.run_unchecked()?;
         if output.code == 0 {
             Ok(output)
@@ -130,7 +135,7 @@ impl Invocation<'_> {
     }
 
     /// Runs the command and returns whatever status it exited with, for callers that read it.
-    pub fn run_unchecked(self) -> Result<Output, CheckpointError> {
+    pub fn run_unchecked(self) -> Result<Output, GitError> {
         let command = self
             .args
             .first()
@@ -140,7 +145,7 @@ impl Invocation<'_> {
         let writer = spawn_writer(child.stdin.take(), self.stdin);
         let stdout = spawn_reader(child.stdout.take());
         let stderr = spawn_reader(child.stderr.take());
-        let code = wait(&mut child, COMMAND_TIMEOUT, &command)?;
+        let code = wait(&mut child, self.timeout, &command)?;
         join_writer(writer)?;
         let stderr = String::from_utf8_lossy(&join_reader(stderr)?)
             .trim()
@@ -153,7 +158,7 @@ impl Invocation<'_> {
         })
     }
 
-    fn spawn(&self) -> Result<Child, CheckpointError> {
+    fn spawn(&self) -> Result<Child, GitError> {
         let git = self.git;
         let mut command = Command::new(&git.program);
         command.current_dir(&git.cwd);
@@ -179,25 +184,25 @@ impl Invocation<'_> {
         hide_console_window(&mut command);
         command.spawn().map_err(|error| match error.kind() {
             io::ErrorKind::NotFound => {
-                CheckpointError::GitMissing(git.program.to_string_lossy().into_owned())
+                GitError::Missing(git.program.to_string_lossy().into_owned())
             }
-            _ => CheckpointError::io(Path::new(&git.program), error),
+            _ => GitError::io(Path::new(&git.program), error),
         })
     }
 }
 
 impl Output {
     /// The error for a run whose exit status the caller read and rejected.
-    pub fn into_error(self) -> CheckpointError {
-        CheckpointError::Git {
+    pub fn into_error(self) -> GitError {
+        GitError::Failed {
             command: self.command,
             stderr: self.stderr,
         }
     }
 
     /// Standard output as text without its trailing line break.
-    pub fn text(&self) -> Result<String, CheckpointError> {
-        let text = std::str::from_utf8(&self.stdout).map_err(|error| CheckpointError::Output {
+    pub fn text(&self) -> Result<String, GitError> {
+        let text = std::str::from_utf8(&self.stdout).map_err(|error| GitError::Output {
             command: self.command.clone(),
             detail: error.to_string(),
         })?;
@@ -205,19 +210,19 @@ impl Output {
     }
 }
 
-fn wait(child: &mut Child, timeout: Duration, command: &str) -> Result<i32, CheckpointError> {
+fn wait(child: &mut Child, timeout: Duration, command: &str) -> Result<i32, GitError> {
     let deadline = Instant::now() + timeout;
     let mut pause = POLL_FIRST;
     loop {
         let waited = child
             .try_wait()
-            .map_err(|error| CheckpointError::io(Path::new(GIT_PROGRAM), error))?;
+            .map_err(|error| GitError::io(Path::new(GIT_PROGRAM), error))?;
         if let Some(status) = waited {
             return Ok(status.code().unwrap_or(-1));
         }
         if Instant::now() >= deadline {
             stop(child);
-            return Err(CheckpointError::Timeout {
+            return Err(GitError::Timeout {
                 command: command.to_owned(),
                 seconds: timeout.as_secs(),
             });
@@ -259,18 +264,18 @@ fn spawn_writer(pipe: Option<ChildStdin>, input: Option<Vec<u8>>) -> JoinHandle<
     })
 }
 
-fn join_reader(handle: JoinHandle<io::Result<Vec<u8>>>) -> Result<Vec<u8>, CheckpointError> {
+fn join_reader(handle: JoinHandle<io::Result<Vec<u8>>>) -> Result<Vec<u8>, GitError> {
     handle
         .join()
-        .map_err(|_| CheckpointError::Task("a git output reader panicked".to_owned()))?
-        .map_err(|error| CheckpointError::io(Path::new(GIT_PROGRAM), error))
+        .map_err(|_| GitError::Task("a git output reader panicked".to_owned()))?
+        .map_err(|error| GitError::io(Path::new(GIT_PROGRAM), error))
 }
 
-fn join_writer(handle: JoinHandle<io::Result<()>>) -> Result<(), CheckpointError> {
+fn join_writer(handle: JoinHandle<io::Result<()>>) -> Result<(), GitError> {
     handle
         .join()
-        .map_err(|_| CheckpointError::Task("a git input writer panicked".to_owned()))?
-        .map_err(|error| CheckpointError::io(Path::new(GIT_PROGRAM), error))
+        .map_err(|_| GitError::Task("a git input writer panicked".to_owned()))?
+        .map_err(|error| GitError::io(Path::new(GIT_PROGRAM), error))
 }
 
 fn truncate(mut text: String) -> String {
@@ -315,7 +320,7 @@ mod tests {
             .command(["rev-parse", "--verify", "no-such-rev"])
             .run()
             .expect_err("fails");
-        assert_eq!(error.code(), "git");
+        assert!(matches!(error, GitError::Failed { .. }));
         assert!(error.to_string().starts_with("git rev-parse failed:"));
     }
 
@@ -335,7 +340,7 @@ mod tests {
             .command(["--version"])
             .run()
             .expect_err("no such program");
-        assert_eq!(error.code(), "git_missing");
+        assert!(matches!(error, GitError::Missing(_)));
     }
 
     #[test]
@@ -349,6 +354,34 @@ mod tests {
             output.text().expect("utf8"),
             "ce013625030ba8dba906f756967f9e9ca394464a"
         );
+    }
+
+    #[test]
+    fn environment_set_on_one_invocation_reaches_the_process() {
+        let git = here();
+        let ident = git
+            .command(["var", "GIT_AUTHOR_IDENT"])
+            .env("GIT_AUTHOR_NAME", "Flare Test")
+            .env("GIT_AUTHOR_EMAIL", "flare@example.com")
+            .run()
+            .expect("ident");
+        assert!(ident
+            .text()
+            .expect("utf8")
+            .starts_with("Flare Test <flare@example.com>"));
+    }
+
+    #[test]
+    fn credential_prompts_are_always_off() {
+        let echoed = here()
+            .command([
+                "-c",
+                "alias.show-prompt=!echo $GIT_TERMINAL_PROMPT",
+                "show-prompt",
+            ])
+            .run()
+            .expect("alias runs");
+        assert_eq!(echoed.text().expect("utf8"), "0");
     }
 
     #[test]
@@ -387,7 +420,7 @@ mod tests {
         .spawn()
         .expect("spawn a sleeper");
         let error = wait(&mut sleeper, Duration::from_millis(50), "sleep").expect_err("times out");
-        assert_eq!(error.code(), "timeout");
+        assert!(matches!(error, GitError::Timeout { .. }));
         assert!(
             sleeper.try_wait().expect("status").is_some(),
             "the process was reaped"

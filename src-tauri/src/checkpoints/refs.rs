@@ -12,8 +12,8 @@
 //! tags and the stash are not affected.
 
 use super::error::CheckpointError;
-use super::git::Git;
 use super::model::Phase;
+use crate::git_cli::Git;
 
 pub const REF_ROOT: &str = "refs/flare/checkpoints";
 const SESSION_ID_LIMIT: usize = 100;

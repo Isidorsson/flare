@@ -5,8 +5,8 @@
 use std::collections::BTreeMap;
 
 use super::error::CheckpointError;
-use super::git::Git;
 use super::refs::{self, SessionId, Slot, StoredRef};
+use crate::git_cli::Git;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Policy {

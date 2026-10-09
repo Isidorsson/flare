@@ -1,6 +1,7 @@
 mod bridge;
 mod checkpoints;
 pub mod fs;
+mod git_cli;
 mod graph;
 mod proctree;
 mod pty;

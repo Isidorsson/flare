@@ -6,7 +6,6 @@ use std::collections::HashSet;
 use super::apply::apply;
 use super::diff::{changed_paths, tree_diff, Change};
 use super::error::CheckpointError;
-use super::git::Git;
 use super::model::{
     CheckpointList, Phase, PlannedFile, RestorePlan, RestoreRequest, RestoreResult, Snapshot,
     TurnDiff,
@@ -17,6 +16,7 @@ use super::refs::{self, RefKey, SessionId, Side, StoredRef};
 use super::snapshot::{commit_tree, snapshot_tree};
 use super::timeline::Timeline;
 use super::workspace::Workspace;
+use crate::git_cli::Git;
 
 pub struct Checkpoints<'a> {
     pub workspace: &'a Workspace,

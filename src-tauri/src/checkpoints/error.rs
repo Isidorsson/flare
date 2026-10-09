@@ -4,6 +4,8 @@ use std::path::Path;
 use serde::ser::SerializeStruct;
 use serde::{Serialize, Serializer};
 
+use crate::git_cli::GitError;
+
 #[derive(Debug, thiserror::Error)]
 pub enum CheckpointError {
     #[error("checkpoints need git, but {0} could not be started: install git and make sure it is on your PATH")]
@@ -58,6 +60,19 @@ impl CheckpointError {
     }
 }
 
+impl From<GitError> for CheckpointError {
+    fn from(error: GitError) -> Self {
+        match error {
+            GitError::Missing(program) => Self::GitMissing(program),
+            GitError::Failed { command, stderr } => Self::Git { command, stderr },
+            GitError::Timeout { command, seconds } => Self::Timeout { command, seconds },
+            GitError::Output { command, detail } => Self::Output { command, detail },
+            GitError::Io { path, source } => Self::Io { path, source },
+            GitError::Task(message) => Self::Task(message),
+        }
+    }
+}
+
 impl Serialize for CheckpointError {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         let mut state = serializer.serialize_struct("CheckpointError", 2)?;
@@ -77,6 +92,23 @@ mod tests {
             .expect("serializes");
         assert_eq!(json["code"], "no_checkpoint");
         assert_eq!(json["message"], "turn 3 is gone");
+    }
+
+    #[test]
+    fn runner_errors_keep_their_codes_and_messages() {
+        let failed = CheckpointError::from(GitError::Failed {
+            command: "add".to_owned(),
+            stderr: "boom".to_owned(),
+        });
+        assert_eq!(failed.code(), "git");
+        assert_eq!(failed.to_string(), "git add failed: boom");
+        let missing = CheckpointError::from(GitError::Missing("git".to_owned()));
+        assert_eq!(missing.code(), "git_missing");
+        let timeout = CheckpointError::from(GitError::Timeout {
+            command: "gc".to_owned(),
+            seconds: 5,
+        });
+        assert_eq!(timeout.code(), "timeout");
     }
 
     #[test]
