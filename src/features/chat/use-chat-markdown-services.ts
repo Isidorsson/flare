@@ -28,7 +28,7 @@ export function useChatMarkdownServices(): MarkdownServices {
         });
       },
       openFile: (target) => {
-        if (rightView === "graph") setRightView("files");
+        if (rightView === "graph" || rightView === "changes") setRightView("files");
         openFileAt(target).catch((error: unknown) => {
           report(`open ${target.path}`, error);
         });
