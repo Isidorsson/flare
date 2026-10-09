@@ -1,6 +1,12 @@
 import { z } from "zod";
 
-import { FILE_CHANGE_KINDS, FILE_EDITING_KINDS, MAX_EDITING_TEXT_CHARS, MAX_MATCH_LINES } from "./constants";
+import {
+  COMMIT_SUBJECT_MAX_CHARS,
+  FILE_CHANGE_KINDS,
+  FILE_EDITING_KINDS,
+  MAX_EDITING_TEXT_CHARS,
+  MAX_MATCH_LINES,
+} from "./constants";
 
 const nonEmpty = z.string().min(1);
 const tokenCount = z.number().int().nonnegative();
@@ -123,6 +129,19 @@ export const errorSchema = z.object({
   fatal: z.boolean().optional(),
 });
 
+export const commitGeneratedSchema = z.object({
+  type: z.literal("commit.generated"),
+  requestId: nonEmpty,
+  subject: nonEmpty.max(COMMIT_SUBJECT_MAX_CHARS),
+  body: nonEmpty.nullable(),
+});
+
+export const commitFailedSchema = z.object({
+  type: z.literal("commit.failed"),
+  requestId: nonEmpty,
+  message: z.string(),
+});
+
 export const bridgeEventSchema = z.discriminatedUnion("type", [
   sessionReadySchema,
   sessionOutputStylesSchema,
@@ -137,6 +156,8 @@ export const bridgeEventSchema = z.discriminatedUnion("type", [
   turnStartedSchema,
   turnCompletedSchema,
   errorSchema,
+  commitGeneratedSchema,
+  commitFailedSchema,
 ]);
 
 export type ToolInput = z.infer<typeof toolInputSchema>;

@@ -6,8 +6,15 @@ export const TITLE_MAX_CHARS = 60;
 
 type ToolEvent = BridgeEventOf<"tool.started" | "tool.finished" | "file.read" | "file.change" | "permission.request">;
 
+type StandaloneEvent = BridgeEventOf<"commit.generated" | "commit.failed">;
+
 export function applyBridgeEvent(thread: Thread, event: BridgeEvent): Thread {
+  if (isStandaloneEvent(event)) return thread;
   return isToolEvent(event) ? applyToolEvent(thread, event) : applyConversationEvent(thread, event);
+}
+
+function isStandaloneEvent(event: BridgeEvent): event is StandaloneEvent {
+  return event.type === "commit.generated" || event.type === "commit.failed";
 }
 
 function isToolEvent(event: BridgeEvent): event is ToolEvent {
@@ -35,7 +42,7 @@ function applyToolEvent(thread: Thread, event: ToolEvent): Thread {
   }
 }
 
-function applyConversationEvent(thread: Thread, event: Exclude<BridgeEvent, ToolEvent>): Thread {
+function applyConversationEvent(thread: Thread, event: Exclude<BridgeEvent, ToolEvent | StandaloneEvent>): Thread {
   switch (event.type) {
     case "session.ready":
       return { ...thread, sessionId: event.sessionId };

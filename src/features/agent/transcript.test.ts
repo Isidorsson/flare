@@ -104,6 +104,20 @@ describe("tools", () => {
   });
 });
 
+describe("standalone replies", () => {
+  test("leave the thread untouched", () => {
+    const thread = replay([{ type: "assistant.delta", text: "Hi" }]);
+    const next = replay(
+      [
+        { type: "commit.generated", requestId: "c1", subject: "fix: x", body: null },
+        { type: "commit.failed", requestId: "c2", message: "nope" },
+      ],
+      thread,
+    );
+    expect(next).toBe(thread);
+  });
+});
+
 describe("permissions", () => {
   const request: BridgeEvent = { type: "permission.request", requestId: "r1", toolName: "Bash", input: { command: "ls" } };
 

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { bridgeEventSchema } from "./bridge-events";
-import { MAX_EDITING_TEXT_CHARS, MAX_MATCH_LINES } from "./constants";
+import { COMMIT_SUBJECT_MAX_CHARS, MAX_EDITING_TEXT_CHARS, MAX_MATCH_LINES } from "./constants";
 
 const usage = { inputTokens: 10, outputTokens: 20, cacheReadInputTokens: 0, cacheCreationInputTokens: 5 };
 
@@ -78,6 +78,25 @@ const validEvents: Record<string, object> = {
   "turn.completed": { type: "turn.completed", costUsd: 0.0123, usage },
   error: { type: "error", message: "boom" },
   "error fatal": { type: "error", message: "bridge exited", fatal: true },
+  "commit.generated with a body": {
+    type: "commit.generated",
+    requestId: "c1",
+    subject: "feat(vcs): add the Changes tab",
+    body: "Staging and committing without leaving the app saves a trip to the terminal.",
+  },
+  "commit.generated without a body": {
+    type: "commit.generated",
+    requestId: "c1",
+    subject: "fix(graph): keep labels readable",
+    body: null,
+  },
+  "commit.generated with a subject at the limit": {
+    type: "commit.generated",
+    requestId: "c1",
+    subject: "x".repeat(COMMIT_SUBJECT_MAX_CHARS),
+    body: null,
+  },
+  "commit.failed": { type: "commit.failed", requestId: "c1", message: "Claude returned no commit message." },
 };
 
 const invalidEvents: Record<string, unknown> = {
@@ -162,6 +181,20 @@ const invalidEvents: Record<string, unknown> = {
   "turn.completed without usage": { type: "turn.completed", costUsd: 0 },
   "error with non-string message": { type: "error", message: 5 },
   "error with non-boolean fatal": { type: "error", message: "x", fatal: "yes" },
+  "commit.generated without requestId": { type: "commit.generated", subject: "fix: x", body: null },
+  "commit.generated with empty requestId": { type: "commit.generated", requestId: "", subject: "fix: x", body: null },
+  "commit.generated without subject": { type: "commit.generated", requestId: "c1", body: null },
+  "commit.generated with empty subject": { type: "commit.generated", requestId: "c1", subject: "", body: null },
+  "commit.generated with an over-long subject": {
+    type: "commit.generated",
+    requestId: "c1",
+    subject: "x".repeat(COMMIT_SUBJECT_MAX_CHARS + 1),
+    body: null,
+  },
+  "commit.generated without body": { type: "commit.generated", requestId: "c1", subject: "fix: x" },
+  "commit.generated with empty body": { type: "commit.generated", requestId: "c1", subject: "fix: x", body: "" },
+  "commit.failed without requestId": { type: "commit.failed", message: "nope" },
+  "commit.failed without message": { type: "commit.failed", requestId: "c1" },
 };
 
 describe("bridgeEventSchema", () => {
@@ -189,6 +222,8 @@ describe("bridgeEventSchema", () => {
         "turn.started",
         "turn.completed",
         "error",
+        "commit.generated",
+        "commit.failed",
       ]),
     );
   });
