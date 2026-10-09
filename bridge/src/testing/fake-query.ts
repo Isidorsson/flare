@@ -4,20 +4,20 @@ import type { Effort } from "@flare/protocol";
 import { AsyncQueue } from "../queue";
 import type { AgentQuery } from "../session";
 
-export interface QueryParams {
-  prompt: AsyncIterable<SDKUserMessage>;
+export interface QueryParams<Prompt = AsyncIterable<SDKUserMessage>> {
+  prompt: Prompt;
   options: Options;
 }
 
 export const FAKE_OUTPUT_STYLES = ["default", "Concise", "Pirate"];
 
-export class FakeQuery implements AgentQuery {
+export class FakeQuery<Prompt = AsyncIterable<SDKUserMessage>> implements AgentQuery {
   readonly calls: string[] = [];
-  readonly params: QueryParams;
+  readonly params: QueryParams<Prompt>;
   readonly #messages = new AsyncQueue<SDKMessage>();
   #failure: Error | null = null;
 
-  constructor(params: QueryParams) {
+  constructor(params: QueryParams<Prompt>) {
     this.params = params;
   }
 

@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { EFFORT_LEVELS, PERMISSION_DECISIONS, PERMISSION_MODES } from "./constants";
+import { EFFORT_LEVELS, MAX_COMMIT_RECENT_SUBJECTS, PERMISSION_DECISIONS, PERMISSION_MODES } from "./constants";
 
 export const effortSchema = z.enum(EFFORT_LEVELS);
 export const permissionModeSchema = z.enum(PERMISSION_MODES);
@@ -49,6 +49,20 @@ export const sessionSetPermissionModeSchema = z.object({
   permissionMode: permissionModeSchema,
 });
 
+// Independent of the chat session: it works whether or not a session has been started.
+export const commitGenerateSchema = z.object({
+  type: z.literal("commit.generate"),
+  requestId: nonEmpty,
+  // `git diff --stat` and the patch of the changes to describe.
+  stat: z.string(),
+  patch: z.string(),
+  // The patch was cut short before it was sent.
+  truncated: z.boolean(),
+  // Most recent first, as a hint for the message style.
+  recentSubjects: z.array(z.string()).max(MAX_COMMIT_RECENT_SUBJECTS),
+  includeBody: z.boolean(),
+});
+
 export const appMessageSchema = z.discriminatedUnion("type", [
   sessionStartSchema,
   userMessageSchema,
@@ -57,6 +71,7 @@ export const appMessageSchema = z.discriminatedUnion("type", [
   sessionSetModelSchema,
   sessionSetEffortSchema,
   sessionSetPermissionModeSchema,
+  commitGenerateSchema,
 ]);
 
 export type Effort = z.infer<typeof effortSchema>;

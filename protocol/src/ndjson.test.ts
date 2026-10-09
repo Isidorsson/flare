@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
+import type { AppMessage } from "./app-messages";
+import type { BridgeEvent } from "./bridge-events";
 import { encodeLine, parseAppMessage, parseBridgeEvent, ProtocolError, splitLines } from "./ndjson";
 
 describe("encodeLine", () => {
@@ -15,6 +17,24 @@ describe("encodeLine", () => {
 
     const event = { type: "assistant.delta", text: "a\r\nb c" } as const;
     expect(parseBridgeEvent(encodeLine(event).trim())).toEqual(event);
+  });
+
+  test("keeps a multi line diff on a single line and round trips commit messages", () => {
+    const request: AppMessage = {
+      type: "commit.generate",
+      requestId: "c1",
+      stat: " a.ts | 1 +",
+      patch: "diff --git a/a.ts b/a.ts\r\n+line\n",
+      truncated: false,
+      recentSubjects: ["fix: x"],
+      includeBody: true,
+    };
+    const line = encodeLine(request);
+    expect(line.slice(0, -1)).not.toContain("\n");
+    expect(parseAppMessage(line.trim())).toEqual(request);
+
+    const generated: BridgeEvent = { type: "commit.generated", requestId: "c1", subject: "fix: x", body: "why\n\nmore" };
+    expect(parseBridgeEvent(encodeLine(generated).trim())).toEqual(generated);
   });
 });
 

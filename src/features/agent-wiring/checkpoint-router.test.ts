@@ -19,6 +19,13 @@ function setup() {
 }
 
 describe("checkpoint router", () => {
+  test("ignores commit message replies", () => {
+    const { route, calls } = setup();
+    route({ type: "commit.generated", requestId: "c1", subject: "fix: x", body: null });
+    route({ type: "commit.failed", requestId: "c2", message: "nope" });
+    expect(calls).toEqual([]);
+  });
+
   test("snapshots when a turn starts and when it completes", () => {
     const { route, calls } = setup();
     route({ type: "turn.started" });

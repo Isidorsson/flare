@@ -1,4 +1,4 @@
-import type { PermissionDecision } from "@flare/protocol";
+import type { AppMessage, PermissionDecision } from "@flare/protocol";
 import { createStore } from "zustand";
 import { createJSONStorage, persist, type StateStorage } from "zustand/middleware";
 import { z } from "zod";
@@ -19,6 +19,7 @@ export interface AgentState extends AgentSnapshot {
   sendMessage: (text: string) => void;
   respondToPermission: (requestId: string, decision: PermissionDecision) => void;
   interrupt: () => void;
+  sendStandalone: (message: AppMessage) => Promise<void>;
   newThread: () => void;
   selectThread: (id: string) => void;
   changeSettings: (patch: Partial<SessionSettings>) => void;
@@ -63,6 +64,7 @@ export function createAgentStore({ storage, ...deps }: AgentStoreDeps) {
           interrupt: () => {
             controller.interrupt();
           },
+          sendStandalone: (message) => controller.sendStandalone(message),
           newThread: () => {
             controller.newThread();
           },

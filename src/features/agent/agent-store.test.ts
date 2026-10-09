@@ -6,6 +6,7 @@ import { selectActiveThread, selectIsBusy, selectLiveThread } from "./agent-sele
 import { AGENT_SETTINGS_STORAGE_KEY, createAgentStore } from "./agent-store";
 import type { BridgeTransport } from "./bridge-transport";
 import { DEFAULT_SESSION_SETTINGS } from "./session-settings";
+import { rejectionOf } from "./testing/rejection-of";
 
 const usage = { inputTokens: 1, outputTokens: 1, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 };
 
@@ -213,6 +214,100 @@ describe("failures talking to the bridge", () => {
 
     expect(ctx.starts()).toBe(2);
     expect(ctx.sent.at(-1)).toEqual({ type: "user.message", text: "two" });
+  });
+});
+
+describe("standalone requests", () => {
+  const commitRequest: AppMessage = {
+    type: "commit.generate",
+    requestId: "c1",
+    stat: " a.ts | 1 +",
+    patch: "diff --git a/a.ts b/a.ts\n+a\n",
+    truncated: false,
+    recentSubjects: [],
+    includeBody: false,
+  };
+
+  test("starts the bridge if it is not running and sends without creating a thread or session", async () => {
+    const ctx = setup();
+
+    await ctx.state().sendStandalone(commitRequest);
+
+    expect(ctx.starts()).toBe(1);
+    expect(ctx.sent).toEqual([commitRequest]);
+    expect(ctx.state().threads).toEqual([]);
+    expect(ctx.state().liveThreadId).toBeNull();
+  });
+
+  test("reuses a bridge that is already running, whether a chat or a commit started it", async () => {
+    const ctx = setup();
+
+    await ctx.state().sendStandalone(commitRequest);
+    await ctx.state().sendStandalone({ ...commitRequest, requestId: "c2" });
+    await startThread(ctx);
+
+    expect(ctx.starts()).toBe(1);
+    expect(ctx.sent.map((message) => message.type)).toEqual([
+      "commit.generate",
+      "commit.generate",
+      "session.start",
+      "user.message",
+    ]);
+  });
+
+  test("sends while a thread is running without disturbing it", async () => {
+    const ctx = setup();
+    await startThread(ctx);
+
+    await ctx.state().sendStandalone(commitRequest);
+
+    expect(selectLiveThread(ctx.state())?.status).toBe("running");
+    expect(ctx.sent.map((message) => message.type)).toEqual(["session.start", "user.message", "commit.generate"]);
+  });
+
+  test("rejects when the bridge cannot start, and retries on the next call", async () => {
+    const ctx = setup();
+    ctx.failures.start = new Error("sidecar missing");
+
+    expect((await rejectionOf(ctx.state().sendStandalone(commitRequest))).message).toBe("sidecar missing");
+    ctx.failures.start = null;
+    await ctx.state().sendStandalone(commitRequest);
+
+    expect(ctx.sent).toEqual([commitRequest]);
+  });
+
+  test("rejects when the send fails and starts the bridge again next time", async () => {
+    const ctx = setup();
+    await ctx.state().sendStandalone(commitRequest);
+    ctx.failures.send = new Error("the agent bridge is not running");
+
+    expect((await rejectionOf(ctx.state().sendStandalone(commitRequest))).message).toBe("the agent bridge is not running");
+    ctx.failures.send = null;
+    await ctx.state().sendStandalone(commitRequest);
+
+    expect(ctx.starts()).toBe(2);
+  });
+
+  test("publishes commit replies to subscribers without adding them to the live thread", async () => {
+    const ctx = setup();
+    await startThread(ctx);
+    const before = selectLiveThread(ctx.state());
+
+    ctx.emit({ type: "commit.generated", requestId: "c1", subject: "fix: x", body: null });
+    ctx.emit({ type: "commit.failed", requestId: "c2", message: "nope" });
+
+    expect(ctx.published.map((event) => event.type)).toEqual(["session.ready", "commit.generated", "commit.failed"]);
+    expect(selectLiveThread(ctx.state())).toEqual(before);
+  });
+
+  test("keeps commit replies out of an idle conversation, even with no live session", async () => {
+    const ctx = setup();
+    await ctx.state().sendStandalone(commitRequest);
+
+    ctx.emit({ type: "commit.failed", requestId: "c1", message: "nope" });
+
+    expect(ctx.state().threads).toEqual([]);
+    expect(ctx.published).toEqual([{ type: "commit.failed", requestId: "c1", message: "nope" }]);
   });
 });
 

@@ -1,7 +1,17 @@
 import { describe, expect, test } from "bun:test";
 
-import { appMessageSchema } from "./app-messages";
-import { BUILT_IN_OUTPUT_STYLES, PERMISSION_MODES } from "./constants";
+import { appMessageSchema, type AppMessageOf } from "./app-messages";
+import { BUILT_IN_OUTPUT_STYLES, MAX_COMMIT_RECENT_SUBJECTS, PERMISSION_MODES } from "./constants";
+
+const commitGenerate: AppMessageOf<"commit.generate"> = {
+  type: "commit.generate",
+  requestId: "c1",
+  stat: "",
+  patch: "diff --git a/a b/a\n",
+  truncated: false,
+  recentSubjects: [],
+  includeBody: false,
+};
 
 const validMessages: Record<string, object> = {
   "session.start": {
@@ -29,6 +39,24 @@ const validMessages: Record<string, object> = {
   "session.setModel": { type: "session.setModel", model: "haiku" },
   "session.setEffort": { type: "session.setEffort", effort: "xhigh" },
   "session.setPermissionMode": { type: "session.setPermissionMode", permissionMode: "plan" },
+  "commit.generate": {
+    type: "commit.generate",
+    requestId: "c1",
+    stat: " src/a.ts | 2 +-\n 1 file changed, 1 insertion(+), 1 deletion(-)",
+    patch: "diff --git a/src/a.ts b/src/a.ts\n-a\n+b\n",
+    truncated: false,
+    recentSubjects: ["feat(chat): stream replies", "fix(graph): keep labels"],
+    includeBody: true,
+  },
+  "commit.generate with nothing to style from": {
+    type: "commit.generate",
+    requestId: "c2",
+    stat: "",
+    patch: "",
+    truncated: true,
+    recentSubjects: [],
+    includeBody: false,
+  },
 };
 
 const invalidMessages: Record<string, unknown> = {
@@ -97,6 +125,17 @@ const invalidMessages: Record<string, unknown> = {
   "session.setModel without model": { type: "session.setModel" },
   "session.setEffort with unknown effort": { type: "session.setEffort", effort: "ultra" },
   "session.setPermissionMode with unknown mode": { type: "session.setPermissionMode", permissionMode: "yolo" },
+  "commit.generate without requestId": { ...commitGenerate, requestId: undefined },
+  "commit.generate with empty requestId": { ...commitGenerate, requestId: "" },
+  "commit.generate without patch": { ...commitGenerate, patch: undefined },
+  "commit.generate with non-boolean truncated": { ...commitGenerate, truncated: "yes" },
+  "commit.generate without includeBody": { ...commitGenerate, includeBody: undefined },
+  "commit.generate with non-array recentSubjects": { ...commitGenerate, recentSubjects: "feat: x" },
+  "commit.generate with a non-string subject": { ...commitGenerate, recentSubjects: [4] },
+  "commit.generate with too many recentSubjects": {
+    ...commitGenerate,
+    recentSubjects: Array.from({ length: MAX_COMMIT_RECENT_SUBJECTS + 1 }, (_, index) => `fix: ${String(index)}`),
+  },
 };
 
 describe("appMessageSchema", () => {
@@ -146,8 +185,14 @@ describe("appMessageSchema", () => {
         "session.setModel",
         "session.setEffort",
         "session.setPermissionMode",
+        "commit.generate",
       ]),
     );
+  });
+
+  test("keeps commit.generate fields intact, including an empty diff", () => {
+    const parsed = appMessageSchema.parse({ ...commitGenerate, patch: "", truncated: true });
+    expect(parsed).toEqual({ ...commitGenerate, patch: "", truncated: true });
   });
 
   test("drops unknown fields so additive changes stay compatible", () => {
